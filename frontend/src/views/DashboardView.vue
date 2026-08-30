@@ -126,7 +126,9 @@ onMounted(async () => {
                 {{ p.genre || '未设题材' }} · {{ p.platform || '未设平台' }} · slug: {{ p.slug }}
               </p>
               <div class="card-actions">
-                <el-button size="small" type="primary" plain>进入</el-button>
+                <el-button size="small" type="primary" plain @click="router.push(`/projects/${p.id}`)">
+                  进入写作台
+                </el-button>
                 <el-button
                   v-if="p.status !== 'active'"
                   size="small"

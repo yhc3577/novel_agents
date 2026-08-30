@@ -23,6 +23,12 @@ const router = createRouter({
       component: () => import('@/views/DashboardView.vue'),
       meta: { requiresAuth: true, title: '工作台' },
     },
+    {
+      path: '/projects/:id',
+      name: 'workspace',
+      component: () => import('@/views/WorkspaceView.vue'),
+      meta: { requiresAuth: true, title: '写作工作台' },
+    },
   ],
 })
 

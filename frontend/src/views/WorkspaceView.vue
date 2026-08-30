@@ -1,0 +1,364 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import AgentActivityPanel from '@/components/AgentActivityPanel.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useProjectsStore } from '@/stores/projects'
+import { useWritingStore } from '@/stores/writing'
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const projectsStore = useProjectsStore()
+const ws = useWritingStore()
+
+const pid = computed(() => Number(route.params.id))
+
+const project = computed(() => projectsStore.projects.find((p) => p.id === pid.value))
+const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
+
+// ---- 写下一章 ----
+const scenario = ref('')
+const target = ref<number | null>(null)
+
+async function onWriteNext(action: 'write_next' | 'daily' = 'write_next') {
+  if (ws.running) return
+  try {
+    await ws.writeNext(pid.value, {
+      action,
+      scenario: scenario.value || undefined,
+      target: target.value || undefined,
+    })
+    ElMessage.info(`已发起任务 #${ws.task?.id}`)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '任务发起失败')
+  }
+}
+
+function onCancel() {
+  ws.cancel()
+  ElMessage.warning('已请求取消')
+}
+
+function onSelectChapter(chapterNo: number) {
+  // 未在写作中才允许切换查看
+  if (ws.running) return
+  void loadChapter(chapterNo)
+}
+
+async function loadChapter(chapterNo: number) {
+  const detail = await (await import('@/api/writing')).writingApi.getChapter(pid.value, chapterNo)
+  ws.current = detail
+}
+
+function onBack() {
+  router.push('/dashboard')
+}
+
+async function onLogout() {
+  auth.logout()
+  router.push('/login')
+}
+
+watch(
+  pid,
+  async (id) => {
+    ws.reset()
+    await projectsStore.fetchList()
+    await ws.load(id)
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  if (!auth.user) void auth.fetchMe()
+})
+
+onUnmounted(() => ws.reset())
+</script>
+
+<template>
+  <el-container class="layout">
+    <el-aside width="240px" class="aside">
+      <div class="aside-brand">
+        <el-button link class="back-btn" @click="onBack">‹ 工作台</el-button>
+        <div class="book-title">{{ project?.title ?? '未知项目' }}</div>
+        <div class="book-meta">{{ project?.genre || '未设题材' }} · {{ project?.slug }}</div>
+      </div>
+      <div class="chapter-tree">
+        <div class="tree-head">章节</div>
+        <div v-for="c in ws.chapters" :key="c.chapter_no" class="chapter-item" @click="onSelectChapter(c.chapter_no)">
+          <el-tag :type="c.status === 'committed' ? 'success' : 'info'" size="small">
+            {{ c.chapter_no }}
+          </el-tag>
+          <span class="chapter-title">{{ c.title }}</span>
+          <span class="chapter-wc">{{ c.wordcount }}</span>
+        </div>
+        <div v-if="ws.chapters.length === 0" class="tree-empty">还没有章节，点「写下一章」开始</div>
+      </div>
+    </el-aside>
+
+    <el-container>
+      <el-header class="header">
+        <div class="header-left">
+          <span class="header-title">{{ project?.title ?? '工作台' }}</span>
+          <el-tag v-if="ws.running" type="warning" size="small" effect="dark" class="running-tag">
+            写作中{{ ws.task?.progress ? ` · ${ws.task.progress}` : '' }}
+          </el-tag>
+        </div>
+        <div class="header-actions">
+          <el-dropdown v-if="!ws.running" trigger="click">
+            <el-button type="primary">
+              ✍️ 写下一章 <el-icon class="el-icon--right"><i class="el-icon-arrow-down" /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="onWriteNext('write_next')">写下一章</el-dropdown-item>
+                <el-dropdown-item @click="onWriteNext('daily')">日更循环（连写至大纲末）</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button v-else type="danger" plain @click="onCancel">取消</el-button>
+          <el-dropdown @command="onLogout">
+            <span class="user-chip">
+              <el-avatar :size="26">{{ displayName[0]?.toUpperCase() || 'U' }}</el-avatar>
+              <span class="user-name">{{ displayName }}</span>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+
+      <el-main class="main">
+        <el-row :gutter="16" class="main-row">
+          <!-- 编辑器 -->
+          <el-col :span="16">
+            <el-card shadow="never" class="editor-card">
+              <div class="editor-head">
+                <span class="editor-title">
+                  第 {{ ws.current?.chapter_no ?? '—' }} 章 · {{ ws.current?.title ?? '等待写作' }}
+                </span>
+                <span class="editor-wc">{{ ws.currentWordcount }} 字</span>
+              </div>
+              <el-input
+                type="textarea"
+                :model-value="ws.currentText"
+                :readonly="ws.running"
+                :autosize="{ minRows: 22, maxRows: 32 }"
+                placeholder="点击「写下一章」，AI 会在这里流式输出正文…"
+                resize="none"
+                class="editor"
+              />
+              <div class="editor-foot">
+                <span>demo 模式（无 API key）下正文为确定性占位；配置 key 后走真实模型流式。</span>
+              </div>
+            </el-card>
+          </el-col>
+
+          <!-- 侧栏 -->
+          <el-col :span="8">
+            <el-tabs class="side-tabs">
+              <el-tab-pane label="追踪" name="tracking">
+                <el-card shadow="never" class="side-card">
+                  <div class="kv" v-if="ws.tracking">
+                    <div class="kv-row"><span>已提交章节</span><b>{{ ws.tracking.last_committed_chapter }}</b></div>
+                    <div class="kv-row"><span>状态修订</span><b>rev {{ ws.tracking.state_revision }}</b></div>
+                    <div class="kv-row">
+                      <span>视图一致</span>
+                      <el-tag :type="ws.tracking.views_consistent ? 'success' : 'danger'" size="small">
+                        {{ ws.tracking.views_consistent ? '一致' : '需重建' }}
+                      </el-tag>
+                    </div>
+                  </div>
+                  <div class="ctx-label">上下文视图（7 列 ≤12KB）</div>
+                  <pre class="ctx-view">{{ ws.contextView?.content || '暂无上下文' }}</pre>
+                </el-card>
+              </el-tab-pane>
+              <el-tab-pane label="Agent 活动" name="agents">
+                <AgentActivityPanel :events="ws.events" />
+              </el-tab-pane>
+            </el-tabs>
+          </el-col>
+        </el-row>
+      </el-main>
+    </el-container>
+  </el-container>
+</template>
+
+<style scoped>
+.layout {
+  height: 100vh;
+}
+.aside {
+  background: #1e2530;
+  display: flex;
+  flex-direction: column;
+  color: #cbd5e1;
+}
+.aside-brand {
+  padding: 14px 16px;
+  border-bottom: 1px solid #2b3442;
+}
+.back-btn {
+  color: #64748b;
+  padding: 0;
+  margin-bottom: 6px;
+}
+.book-title {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+.book-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+.chapter-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+.tree-head {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.chapter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.chapter-item:hover {
+  background: #2b3442;
+}
+.chapter-title {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chapter-wc {
+  font-size: 11px;
+  color: #64748b;
+}
+.tree-empty {
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  padding: 24px 0;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.running-tag {
+  max-width: 380px;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.user-name {
+  font-size: 14px;
+  color: #374151;
+}
+.main {
+  background: #f5f6fa;
+}
+.main-row {
+  height: 100%;
+}
+.editor-card {
+  min-height: 72vh;
+}
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.editor-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.editor-wc {
+  color: #6b7280;
+  font-size: 13px;
+}
+.editor :deep(.el-textarea__inner) {
+  font-family: 'Songti SC', 'SimSun', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.9;
+  color: #1f2937;
+}
+.editor-foot {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+.side-card {
+  margin-top: 4px;
+}
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #374151;
+  border-bottom: 1px dashed #eef2f7;
+}
+.ctx-label {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+.ctx-view {
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: #475569;
+  font-family: inherit;
+  margin: 0;
+}
+.side-tabs {
+  height: 100%;
+}
+</style>
