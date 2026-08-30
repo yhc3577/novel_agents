@@ -138,6 +138,17 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                         "action": payload.get("action", "write_chapter"),
                     }
                 )
+            elif task.type == "analyze":
+                from app.graphs.analyze import build_analyze_graph
+
+                graph = build_analyze_graph(runtime, payload.get("book_id"))
+                await graph.ainvoke(
+                    {
+                        "user_id": task.owner_id,
+                        "book_id": payload.get("book_id"),
+                        "task_id": task_id,
+                    }
+                )
             else:
                 raise ValueError(f"未知任务类型: {task.type}")
             task.status = "success"
