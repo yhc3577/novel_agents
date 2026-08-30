@@ -1,0 +1,58 @@
+# LLM 供应商种子配置（首启 seed 进 providers 表）。
+# base_url 均为 OpenAI 兼容端点；api_key 留空，由设置页/管理员填入（落库加密）。
+# models: 三档 high/mid/low 对应复杂/常规/廉价任务。
+providers:
+  - name: deepseek
+    base_url: "https://api.deepseek.com/v1"
+    api_key: ""
+    models:
+      high: deepseek-reasoner
+      mid: deepseek-chat
+      low: deepseek-chat
+    enabled: true
+    priority: 0
+  - name: qwen
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: ""
+    models:
+      high: qwen-max
+      mid: qwen-plus
+      low: qwen-turbo
+    enabled: true
+    priority: 10
+  - name: glm
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""
+    models:
+      high: glm-4-plus
+      mid: glm-4-flash
+      low: glm-4-flash
+    enabled: true
+    priority: 20
+  - name: kimi
+    base_url: "https://api.moonshot.cn/v1"
+    api_key: ""
+    models:
+      high: moonshot-v1-128k
+      mid: moonshot-v1-32k
+      low: moonshot-v1-8k
+    enabled: true
+    priority: 30
+  - name: doubao
+    base_url: "https://ark.cn-beijing.volces.com/api/v3"
+    api_key: ""
+    models:
+      high: doubao-pro-32k
+      mid: doubao-lite-32k
+      low: doubao-lite-32k
+    enabled: true
+    priority: 40
+  - name: minimax
+    base_url: "https://api.minimax.chat/v1"
+    api_key: ""
+    models:
+      high: MiniMax-Text-01
+      mid: abab6.5s-chat
+      low: abab6.5s-chat
+    enabled: true
+    priority: 50
