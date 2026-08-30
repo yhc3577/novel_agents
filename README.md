@@ -64,7 +64,7 @@ npm run dev                     # http://localhost:5173, /api proxied to :8000
 
 ```bash
 cd backend
-python -m pytest        # 77 cases (in-memory SQLite, covers all modules)
+python -m pytest        # 82 cases (in-memory SQLite, covers all modules)
 ```
 
 ## Repository Layout

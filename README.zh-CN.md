@@ -61,7 +61,7 @@ npm run dev        # http://localhost:5173，/api 代理到 :8000
 
 ```bash
 cd backend
-python -m pytest        # 77 个用例（内存 SQLite，覆盖全部模块）
+python -m pytest        # 82 个用例（内存 SQLite，覆盖全部模块）
 ```
 
 ## 项目结构

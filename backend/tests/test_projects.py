@@ -1,5 +1,7 @@
 from httpx import AsyncClient
+from sqlalchemy import select
 
+from app.models import Chapter, ChapterReview, Character, Task, UserSetting, Volume
 from tests.conftest import register
 
 
@@ -85,3 +87,47 @@ async def test_update_project(client: AsyncClient):
 async def test_projects_require_auth(client: AsyncClient):
     r = await client.get("/api/projects")
     assert r.status_code == 401
+
+
+async def test_delete_project_cascades(client: AsyncClient, db):
+    """删除项目应整树清理附属数据（章节/追踪/审查/任务等），且无主用户数据不动。"""
+    token = (await register(client, "del1"))["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+    p = await _create(client, token, "del-book")
+
+    # 造一层附属数据：章节 + 审查 + 人物 + 任务 + 用户默认项目
+    me = (await client.get("/api/auth/me", headers=h)).json()
+    db.add_all([
+        Volume(project_id=p["id"], no=1, title="卷1"),
+        Chapter(project_id=p["id"], chapter_no=1, title="第一章", content="正文", status="committed"),
+        Character(project_id=p["id"], name="主角", profile={"性格": "坚韧"}),
+        ChapterReview(project_id=p["id"], chapter_no=1, mode="full", score=8, verdict="pass", findings=[], summary="好"),
+        Task(owner_id=me["id"], project_id=p["id"], type="write_chapter", status="success", payload={"a": 1}),
+        UserSetting(user_id=me["id"], default_project_id=p["id"]),
+    ])
+    await db.commit()
+
+    r = await client.delete(f"/api/projects/{p['id']}", headers=h)
+    assert r.status_code == 200
+
+    # 项目与其附属行全部消失
+    assert (await client.get(f"/api/projects/{p['id']}", headers=h)).status_code == 404
+    for model in (Chapter, ChapterReview, Character, Task, Volume):
+        assert (await db.scalar(select(model).where(model.project_id == p["id"]))) is None
+    # 用户默认项目引用被摘除（用户设置本身保留）
+    us = (await db.scalar(select(UserSetting).where(UserSetting.user_id == me["id"])))
+    assert us is not None and us.default_project_id is None
+
+
+async def test_delete_project_owner_isolation(client: AsyncClient):
+    """越权删除 404；重复删除 404。"""
+    t_a = (await register(client, "del_a"))["access_token"]
+    t_b = (await register(client, "del_b"))["access_token"]
+    p = await _create(client, t_a, "del-secret")
+
+    r = await client.delete(f"/api/projects/{p['id']}", headers={"Authorization": f"Bearer {t_b}"})
+    assert r.status_code == 404
+    r = await client.delete(f"/api/projects/{p['id']}", headers={"Authorization": f"Bearer {t_a}"})
+    assert r.status_code == 200
+    r = await client.delete(f"/api/projects/{p['id']}", headers={"Authorization": f"Bearer {t_a}"})
+    assert r.status_code == 404

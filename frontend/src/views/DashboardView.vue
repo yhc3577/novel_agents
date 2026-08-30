@@ -97,7 +97,7 @@ onMounted(async () => {
           <span>设置</span>
         </el-menu-item>
       </el-menu>
-      <div class="aside-placeholder">写作 · 拆文 · 审查 · 扫榜 模块陆续开放</div>
+      <div class="aside-placeholder">写作 · 拆文 · 审查 · 扫榜 · 用量 全部就绪</div>
     </el-aside>
 
     <el-container>
