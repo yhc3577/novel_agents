@@ -1,3 +1,6 @@
+# novel-agents 全栈编排（D11：US-30）：postgres + backend(FastAPI) + frontend(nginx)。
+# 快速启动：`docker compose up --build -d` → http://localhost:8080
+# 环境变量可从 .env 读取（见 .env.example）。
 services:
   postgres:
     image: postgres:16
@@ -15,6 +18,34 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: novel_agents_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://novel:novel@postgres:5432/novel_agents
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
+      FERNET_KEY: ${FERNET_KEY:-}
+      REDIS_URL: ${REDIS_URL:-}
+      KV_CACHE_ENABLED: ${KV_CACHE_ENABLED:-true}
+      CORS_ORIGINS: '["http://localhost:8080","http://localhost:5173"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: novel_agents_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

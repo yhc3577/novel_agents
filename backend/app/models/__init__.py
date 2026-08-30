@@ -6,6 +6,7 @@ from app.models.analysis import (
     AnalysisProgress,
     ScanResult,
 )
+from app.models.kv import KvCache, KvLock
 from app.models.review import ChapterReview, DeslopRun
 from app.models.provider import Provider
 from app.models.project import Project
@@ -32,6 +33,8 @@ __all__ = [
     "AnalysisChapter",
     "AnalysisProgress",
     "AuthorMemory",
+    "KvCache",
+    "KvLock",
     "Benchmark",
     "Chapter",
     "ChapterRecord",

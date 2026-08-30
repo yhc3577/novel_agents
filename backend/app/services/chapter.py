@@ -9,6 +9,7 @@ commit 为写作链路唯一的章节提交入口：
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.locks import LockBusy, chapter_redis_lock
 from app.models import Chapter, OutlineChapter, Project, Volume
 from app.schemas.tracking import TrackingTx
 from app.services.quality import QualityService
@@ -103,7 +104,28 @@ class ChapterService:
         expected_revision: int | None = None,
         fail_on: str = "none",
     ) -> Chapter:
-        """原子提交：质量门禁 → 追踪事务 → 标记 committed。"""
+        """原子提交：质量门禁 → 追踪事务 → 标记 committed。
+
+        - PG advisory lock 已在 TrackingService.commit 内串行化同一项目提交（US-29）；
+        - 这里再包一层可选的 Redis 锁（`lock:chapter:{pid}:{no}`）作双重保险。
+        """
+        try:
+            async with chapter_redis_lock(project_id, chapter_no):
+                return await self._commit_body(
+                    project_id, chapter_no, tx, expected_revision=expected_revision, fail_on=fail_on
+                )
+        except LockBusy as e:
+            raise ChapterConflict(str(e)) from e
+
+    async def _commit_body(
+        self,
+        project_id: int,
+        chapter_no: int,
+        tx: dict,
+        *,
+        expected_revision: int | None,
+        fail_on: str,
+    ) -> Chapter:
         ch = await self._require(project_id, chapter_no)
         if ch.status == "committed" and not tx:
             raise ChapterConflict(f"章节 {chapter_no} 已提交，无变更可提交")
@@ -116,7 +138,7 @@ class ChapterService:
         if report.blocking:
             raise ChapterConflict(f"质量门禁未过：{report.blocking[0].type}「{report.blocking[0].quote}」")
 
-        # 3) 追踪事务（单事务，内部 commit）
+        # 3) 追踪事务（单事务，内部 commit + advisory lock）
         await self.tracking.commit(
             project_id,
             tx,

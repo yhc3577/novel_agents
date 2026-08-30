@@ -2,13 +2,14 @@
 
 铁律（架构 §3.2）：`tracking_state` 与派生视图（chapter_records / context_views）
 只能由 TrackingService / ChapterService 写入。commit 全程单事务：
-BEGIN → 锁项目行 FOR UPDATE → 契约校验 → 联动角色/伏笔/时间线 → 重建派生视图 →
-revision+1 → COMMIT。
+BEGIN → PG advisory lock（项目级串行化，US-29）→ 锁项目行 FOR UPDATE →
+契约校验 → 联动角色/伏笔/时间线 → 重建派生视图 → revision+1 → COMMIT。
 """
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.locks import chapter_commit_lock
 from app.models import (
     ChapterRecord,
     Character,
@@ -81,53 +82,63 @@ class TrackingService:
 
         - `expected_revision` 提供乐观锁：不等于当前 revision 即抛 TrackingConflict。
         - 任何一步失败整事务回滚，不产生半写状态。
+        - 项目级 PG advisory lock 串行化同一项目的并发提交（US-29）。
         """
         # 契约校验（Pydantic，先于任何 DB 写）
         tx = TrackingTx.model_validate(transaction_json)
 
-        try:
-            # 锁项目行，串行化并发提交
-            project = await self.db.scalar(
-                select(Project).where(Project.id == project_id).with_for_update()
-            )
-            if project is None:
-                raise TrackingValidationError(f"项目 {project_id} 不存在")
+        async with chapter_commit_lock(self.db, project_id):
+            try:
+                return await self._commit_inner(project_id, tx, expected_revision)
+            except Exception:
+                await self.db.rollback()
+                raise
 
-            state = await self.db.scalar(
-                select(TrackingState)
-                .where(TrackingState.project_id == project_id)
-                .with_for_update()
-            )
-            if state is None:
-                state = TrackingState(project_id=project_id, state_revision=0, last_committed_chapter=0)
-                self.db.add(state)
-                await self.db.flush()
+    async def _commit_inner(
+        self,
+        project_id: int,
+        tx: TrackingTx,
+        expected_revision: int | None,
+    ) -> int:
+        """advisory 锁内的提交主体：锁项目行 → 联动 → 重建视图 → commit。"""
+        project = await self.db.scalar(
+            select(Project).where(Project.id == project_id).with_for_update()
+        )
+        if project is None:
+            raise TrackingValidationError(f"项目 {project_id} 不存在")
 
-            if expected_revision is not None and state.state_revision != expected_revision:
-                raise TrackingConflict(
-                    f"版本冲突：期望 revision={expected_revision}，实际={state.state_revision}"
-                )
-
-            # 章节连续性：可提交下一章，或重提交已有章节（revision 仅 track 次数）
-            if tx.chapter_no < 1:
-                raise TrackingValidationError(f"非法章节号 {tx.chapter_no}")
-
-            await self._apply_tx(project_id, tx)
-
-            # 版本推进
-            state.state_revision += 1
-            state.last_committed_chapter = max(state.last_committed_chapter, tx.chapter_no)
-            state.state_jsonb = {"tx": tx.model_dump(), "chapter_no": tx.chapter_no}
+        state = await self.db.scalar(
+            select(TrackingState)
+            .where(TrackingState.project_id == project_id)
+            .with_for_update()
+        )
+        if state is None:
+            state = TrackingState(project_id=project_id, state_revision=0, last_committed_chapter=0)
+            self.db.add(state)
             await self.db.flush()
 
-            # 重建派生视图（同一事务内可见）
-            await self._rebuild_derived(project_id, state)
+        if expected_revision is not None and state.state_revision != expected_revision:
+            raise TrackingConflict(
+                f"版本冲突：期望 revision={expected_revision}，实际={state.state_revision}"
+            )
 
-            await self.db.commit()
-            return state.state_revision
-        except Exception:
-            await self.db.rollback()
-            raise
+        # 章节连续性：可提交下一章，或重提交已有章节（revision 仅 track 次数）
+        if tx.chapter_no < 1:
+            raise TrackingValidationError(f"非法章节号 {tx.chapter_no}")
+
+        await self._apply_tx(project_id, tx)
+
+        # 版本推进
+        state.state_revision += 1
+        state.last_committed_chapter = max(state.last_committed_chapter, tx.chapter_no)
+        state.state_jsonb = {"tx": tx.model_dump(), "chapter_no": tx.chapter_no}
+        await self.db.flush()
+
+        # 重建派生视图（同一事务内可见）
+        await self._rebuild_derived(project_id, state)
+
+        await self.db.commit()
+        return state.state_revision
 
     # ---- 私有：事务应用 ----
 

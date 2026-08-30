@@ -16,6 +16,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://novel:novel@localhost:5432/novel_agents"
 
+    # KV 缓存/锁（US-28）：redis_url 非空 → RedisStore；否则 → PG 回源；kv_cache_enabled=false → NullStore（禁用）
+    redis_url: str | None = None
+    kv_cache_enabled: bool = True
+
     jwt_secret: str = "dev-secret-change-me-please-set-a-random-32b-plus-key"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
