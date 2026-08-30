@@ -80,6 +80,7 @@ onMounted(async () => {
       <el-menu :default-active="$route.path" router class="aside-menu">
         <el-menu-item index="/dashboard">工作台</el-menu-item>
         <el-menu-item index="/analysis">拆文库</el-menu-item>
+        <el-menu-item index="/quality">审查 / 去味</el-menu-item>
         <el-menu-item index="/settings">设置</el-menu-item>
       </el-menu>
     </el-aside>

@@ -6,6 +6,7 @@ from app.models.analysis import (
     AnalysisProgress,
     ScanResult,
 )
+from app.models.review import ChapterReview, DeslopRun
 from app.models.provider import Provider
 from app.models.project import Project
 from app.models.setting import UserSetting
@@ -34,6 +35,8 @@ __all__ = [
     "Benchmark",
     "Chapter",
     "ChapterRecord",
+    "ChapterReview",
+    "DeslopRun",
     "Character",
     "ContextView",
     "Foreshadowing",

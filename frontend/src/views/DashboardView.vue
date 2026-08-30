@@ -84,6 +84,9 @@ onMounted(async () => {
         <el-menu-item index="/analysis">
           <span>拆文库</span>
         </el-menu-item>
+        <el-menu-item index="/quality">
+          <span>审查 / 去味</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <span>设置</span>
         </el-menu-item>

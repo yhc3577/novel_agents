@@ -36,6 +36,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: '拆文库' },
     },
     {
+      path: '/quality',
+      name: 'quality',
+      component: () => import('@/views/QualityView.vue'),
+      meta: { requiresAuth: true, title: '审查 / 去味' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

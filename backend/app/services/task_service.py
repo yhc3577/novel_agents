@@ -149,6 +149,31 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                         "task_id": task_id,
                     }
                 )
+            elif task.type == "review":
+                from app.graphs.review import build_review_graph
+
+                graph = build_review_graph(runtime)
+                await graph.ainvoke(
+                    {
+                        "user_id": task.owner_id,
+                        "project_id": task.project_id,
+                        "chapter_no": payload.get("chapter_no"),
+                        "task_id": task_id,
+                        "mode": payload.get("mode", "full"),
+                    }
+                )
+            elif task.type == "deslop":
+                from app.graphs.deslop import build_deslop_graph
+
+                graph = build_deslop_graph(runtime)
+                await graph.ainvoke(
+                    {
+                        "user_id": task.owner_id,
+                        "project_id": task.project_id,
+                        "chapter_no": payload.get("chapter_no"),
+                        "task_id": task_id,
+                    }
+                )
             else:
                 raise ValueError(f"未知任务类型: {task.type}")
             task.status = "success"
