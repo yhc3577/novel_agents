@@ -174,6 +174,17 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                         "task_id": task_id,
                     }
                 )
+            elif task.type == "scan":
+                from app.graphs.scan import build_scan_graph
+
+                graph = build_scan_graph(runtime)
+                await graph.ainvoke(
+                    {
+                        "user_id": task.owner_id,
+                        "task_id": task_id,
+                        "platforms": payload.get("platforms") or [],
+                    }
+                )
             else:
                 raise ValueError(f"未知任务类型: {task.type}")
             task.status = "success"

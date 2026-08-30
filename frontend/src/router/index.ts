@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: '审查 / 去味' },
     },
     {
+      path: '/scan',
+      name: 'scan',
+      component: () => import('@/views/ScanView.vue'),
+      meta: { requiresAuth: true, title: '扫榜' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
