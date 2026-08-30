@@ -29,6 +29,18 @@ const router = createRouter({
       component: () => import('@/views/WorkspaceView.vue'),
       meta: { requiresAuth: true, title: '写作工作台' },
     },
+    {
+      path: '/analysis',
+      name: 'analysis',
+      component: () => import('@/views/AnalysisView.vue'),
+      meta: { requiresAuth: true, title: '拆文库' },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { requiresAuth: true, title: '设置' },
+    },
   ],
 })
 

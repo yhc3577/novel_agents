@@ -126,6 +126,20 @@ class ModelFactory:
         )
         await self.db.flush()
 
+    async def probe(self, provider: str, model: str, prompt: str = "ping") -> tuple[bool, int, str | None]:
+        """连通性测试（设置页用）：单次最小调用，不做用量记录。返回 (ok, latency_ms, error)。"""
+        providers = await self._load()
+        pconf = next((p for p in providers if p.name == provider and p.api_key), None)
+        if pconf is None:
+            return False, 0, f"provider '{provider}' 未配置 api_key"
+        chat = self._client(pconf, model)
+        started = time.monotonic()
+        try:
+            await chat.ainvoke([("human", prompt)])
+        except Exception as e:  # noqa: BLE001 网络/鉴权错误都算失败
+            return False, int((time.monotonic() - started) * 1000), f"{type(e).__name__}: {str(e)[:200]}"
+        return True, int((time.monotonic() - started) * 1000), None
+
     async def invoke_with_retry(self, tier: str, messages, *, task_type: str, max_retries: int = 2) -> str:
         """API 级重试：指数退避 + 同 tier 跨 provider 降级；prompt 保持不变。"""
         candidates = await self._candidates(tier)

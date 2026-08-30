@@ -82,6 +82,25 @@ async def get_book(
     return snap
 
 
+@router.post("/analysis/books/{book_id}/import")
+async def import_book(
+    book_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """一键导入：拆解完成的书 → 可写项目（结构迁移/正文入库/追踪初始化/激活）。"""
+    await _own_book(db, user, book_id)
+    from app.graphs.ctx import GraphRuntime
+    from app.graphs.import_graph import build_import_graph
+
+    runtime = GraphRuntime(db=db, user_id=user.id, project_id=0)
+    result = await build_import_graph(runtime).ainvoke({"user_id": user.id, "book_id": book_id})
+    return {
+        "project_id": result["project_id"],
+        "slug": result.get("slug"),
+        "title": result.get("title"),
+        "imported": result.get("imported", False),
+    }
+
+
 @router.get("/analysis/books/{book_id}/report")
 async def get_report(
     book_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)

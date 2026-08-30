@@ -81,8 +81,14 @@ onMounted(async () => {
         <el-menu-item index="/dashboard">
           <span>工作台</span>
         </el-menu-item>
+        <el-menu-item index="/analysis">
+          <span>拆文库</span>
+        </el-menu-item>
+        <el-menu-item index="/settings">
+          <span>设置</span>
+        </el-menu-item>
       </el-menu>
-      <div class="aside-placeholder">大纲 · 写作 · 追踪 模块将在 D3+ 开放</div>
+      <div class="aside-placeholder">写作 · 拆文 · 审查 · 扫榜 模块陆续开放</div>
     </el-aside>
 
     <el-container>
