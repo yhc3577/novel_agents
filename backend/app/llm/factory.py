@@ -58,6 +58,14 @@ class ModelFactory:
         provider, model = spec.split(":", 1)
         return provider.strip(), model.strip()
 
+    async def available(self, tier: str) -> bool:
+        """该 tier 是否有已配置 key 的候选模型（无 key 时图节点走确定性兜底）。"""
+        try:
+            await self._candidates(tier)
+            return True
+        except ModelUnavailable:
+            return False
+
     async def _candidates(self, tier: str) -> list[tuple[ProviderConfig, str]]:
         """该 tier 的候选 (provider, model)，按 priority 升序。"""
         providers = await self._load()

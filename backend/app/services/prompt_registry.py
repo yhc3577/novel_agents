@@ -17,8 +17,9 @@ SEPARATOR = "\n\n"
 
 
 class PromptRegistry:
-    def __init__(self, prompts_dir: Path):
-        self._dir = Path(prompts_dir)
+    def __init__(self, prompts_dir: Path | None = None):
+        # 缺省：backend/prompts（app/services/prompt_registry.py → 上三级）
+        self._dir = Path(prompts_dir) if prompts_dir else Path(__file__).resolve().parent.parent.parent / "prompts"
         self._env = Environment(
             loader=FileSystemLoader(str(self._dir)),
             autoescape=False,

@@ -31,7 +31,7 @@ async def db(db_engine):
 
 
 @pytest.fixture
-async def client(db_engine):
+async def client_app(db_engine):
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
 
     async def _get_db():
@@ -40,12 +40,19 @@ async def client(db_engine):
 
     app = create_app()
     app.dependency_overrides[get_db] = _get_db
+    # 后台任务（写章/SSE）与测试共用同一内存库
+    app.state.session_factory = session_factory
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    yield app
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def client(client_app):
+    transport = ASGITransport(app=client_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
 
 
 async def register(client: AsyncClient, username: str, password: str = "secret123", **extra) -> dict:

@@ -3,12 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.db.engine import SessionLocal
 
 settings = get_settings()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, debug=settings.debug)
+
+    # 后台任务（写作/拆文等）使用的会话工厂；测试可覆盖为内存库
+    app.state.session_factory = SessionLocal
 
     app.add_middleware(
         CORSMiddleware,
