@@ -1,11 +1,14 @@
 """ModelFactory：用量记录（含 cached_tokens）与跨 provider 降级。"""
 
+import asyncio
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import select
 
 from app.core.crypto import encrypt_secret
 from app.llm import ModelFactory
+from app.llm.factory import ModelUnavailable
 from app.models import Provider, UsageLog, User
 
 
@@ -106,3 +109,57 @@ async def test_cross_provider_downgrade(db, monkeypatch):
     assert text == "降级成功"
     row = await db.scalar(select(UsageLog).where(UsageLog.owner_id == user.id))
     assert row.provider == "p_good"
+
+
+class TimeoutChat:
+    async def ainvoke(self, messages):
+        raise TimeoutError("connection timed out")
+
+
+async def test_timeout_retry_then_fallback(db, monkeypatch):
+    """主 provider 超时 → 指数退避重试 → 自动降级到同 tier 备用（prompt 不变）。"""
+    await _seed_provider(db, "p_timeout", 0)
+    await _seed_provider(db, "p_backup", 10)
+    user = await _seed_user(db, "usg_timeout")
+    await db.flush()
+
+    factory = ModelFactory(db, user.id)
+
+    def client(pconf, model):
+        if pconf.name == "p_timeout":
+            return TimeoutChat()
+        return FakeChat(_fake_msg("备用响应", {"prompt_tokens": 2, "completion_tokens": 2}))
+
+    monkeypatch.setattr(factory, "_client", client)
+    # 免真实退避等待
+    async def _no_sleep(_s):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+    text = await factory.invoke_with_retry("low", [("human", "hi")], task_type="test", max_retries=2)
+    await db.flush()
+
+    assert text == "备用响应"
+    row = await db.scalar(select(UsageLog).where(UsageLog.owner_id == user.id))
+    assert row.provider == "p_backup"
+
+
+async def test_all_candidates_fail_raises_readable_error(db, monkeypatch):
+    """所有候选都失败 → ModelUnavailable，错误信息包含 provider 名与类型（失败提示）。"""
+    await _seed_provider(db, "p_a", 0)
+    await _seed_provider(db, "p_b", 10)
+    user = await _seed_user(db, "usg_allfail")
+    await db.flush()
+
+    factory = ModelFactory(db, user.id)
+    monkeypatch.setattr(factory, "_client", lambda pconf, model: RaisingChat())
+    async def _no_sleep(_s):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+    with pytest.raises(ModelUnavailable) as ei:
+        await factory.invoke_with_retry("mid", [("human", "hi")], task_type="test", max_retries=1)
+    msg = str(ei.value)
+    assert "p_a" in msg and "p_b" in msg and "RuntimeError" in msg

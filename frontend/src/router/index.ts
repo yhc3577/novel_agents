@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: '扫榜' },
     },
     {
+      path: '/usage',
+      name: 'usage',
+      component: () => import('@/views/UsageView.vue'),
+      meta: { requiresAuth: true, title: '用量' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

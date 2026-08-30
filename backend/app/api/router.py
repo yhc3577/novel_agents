@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import analysis, auth, projects, quality, scan, settings, writing
+from app.api import analysis, auth, projects, quality, scan, settings, usage, writing
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
@@ -10,3 +10,4 @@ api_router.include_router(analysis.router)
 api_router.include_router(settings.router)
 api_router.include_router(quality.router)
 api_router.include_router(scan.router)
+api_router.include_router(usage.router)

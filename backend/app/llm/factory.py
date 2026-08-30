@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import UsageLog, UserSetting
+from app.services.cost import estimate_cost
 from app.llm.providers import ProviderConfig, load_providers
 
 
@@ -121,6 +122,9 @@ class ModelFactory:
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
                 cached_tokens=usage["cached_tokens"],
+                cost_estimate=estimate_cost(
+                    provider, usage["prompt_tokens"], usage["completion_tokens"], usage["cached_tokens"]
+                ),
                 latency_ms=latency_ms,
             )
         )
@@ -143,17 +147,18 @@ class ModelFactory:
     async def invoke_with_retry(self, tier: str, messages, *, task_type: str, max_retries: int = 2) -> str:
         """API 级重试：指数退避 + 同 tier 跨 provider 降级；prompt 保持不变。"""
         candidates = await self._candidates(tier)
-        last_err: Exception | None = None
+        errors: list[str] = []
         for attempt in range(max_retries + 1):
             for pconf, model in candidates:
                 try:
                     return await self._invoke_once(pconf, model, messages, task_type)
                 except ModelUnavailable as e:
-                    last_err = e
+                    errors.append(str(e))
                     continue
             if attempt < max_retries:
                 await asyncio.sleep(_backoff(attempt))
-        raise ModelUnavailable(f"tier='{tier}' 重试 {max_retries} 轮后仍失败: {last_err}")
+        detail = "；".join(dict.fromkeys(errors)) or "无可用 provider"
+        raise ModelUnavailable(f"tier='{tier}' 重试 {max_retries} 轮后仍失败: {detail}")
 
     async def stream(self, tier: str, messages, *, task_type: str) -> AsyncIterator[str]:
         """异步流式；返回 token 增量生成器。调用方负责消费完毕。"""

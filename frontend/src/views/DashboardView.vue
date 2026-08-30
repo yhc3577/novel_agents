@@ -90,6 +90,9 @@ onMounted(async () => {
         <el-menu-item index="/scan">
           <span>扫榜</span>
         </el-menu-item>
+        <el-menu-item index="/usage">
+          <span>用量</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <span>设置</span>
         </el-menu-item>
