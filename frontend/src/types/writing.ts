@@ -49,3 +49,36 @@ export interface AgentEvent {
   last_committed_chapter?: number
   views_consistent?: boolean
 }
+
+// ---- 开书（大纲） ----
+
+/** 归一化后的细纲情节点（兼容开书写入 / 拆文导入两种形状）。 */
+export interface OutlineBeatsView {
+  summary: string
+  target_wordcount?: number | null
+  points?: unknown[]
+}
+
+export interface OutlineChapter {
+  chapter_no: number
+  title: string
+  contract_status: string
+  beats: OutlineBeatsView
+}
+
+export interface VolumeOutline {
+  no: number
+  title: string
+  synopsis: string | null
+  chapters: OutlineChapter[]
+}
+
+export interface ProjectOutline {
+  has_outline: boolean
+  volumes: VolumeOutline[]
+}
+
+export interface OpenBookPayload {
+  scenario?: string
+  force?: boolean
+}

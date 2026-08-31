@@ -185,6 +185,15 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                         "platforms": payload.get("platforms") or [],
                     }
                 )
+            elif task.type == "open_book":
+                from app.services.outline import generate_outline
+
+                await generate_outline(
+                    runtime.db, runtime,
+                    project_id=task.project_id,
+                    scenario=payload.get("scenario", ""),
+                    force=bool(payload.get("force")),
+                )
             else:
                 raise ValueError(f"未知任务类型: {task.type}")
             task.status = "success"

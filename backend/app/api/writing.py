@@ -13,6 +13,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models import Chapter, ContextView, Project, Task, TrackingState, User
 from app.services.context import ContextService
+from app.services.outline import project_outline
 from app.services.task_service import TaskService
 from app.services.tracking import TrackingService
 
@@ -24,6 +25,11 @@ class NextChapterIn(BaseModel):
     scenario: str = Field(default="", max_length=2000)
     chapter_no: int | None = Field(default=None, ge=1)
     target: int | None = Field(default=None, ge=200, le=50000)
+
+
+class OpenBookIn(BaseModel):
+    scenario: str = Field(default="", max_length=2000, description="开书意图（无 key 时影响 stub 大纲）")
+    force: bool = Field(default=False, description="true 时删除旧大纲重新生成")
 
 
 class TaskOut(BaseModel):
@@ -116,6 +122,39 @@ async def task_events(
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ---- 开书（大纲） ----
+
+@router.get("/projects/{project_id}/outline")
+async def get_outline(
+    project_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """读取项目开书大纲（卷 → 章 → 细纲），兼容开书 / 拆文导入两种 beats 形状。"""
+    await _own_project(db, user, project_id)
+    return await project_outline(db, project_id)
+
+
+@router.post("/projects/{project_id}/open-book", response_model=TaskOut)
+async def open_book(
+    project_id: int,
+    payload: OpenBookIn,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """发起开书任务（后台执行）：已有大纲且未 force 时静默跳过；force=true 覆盖重生成。"""
+    await _own_project(db, user, project_id)
+    svc = TaskService()
+    task = await svc.create(
+        db,
+        owner_id=user.id,
+        project_id=project_id,
+        type="open_book",
+        payload=payload.model_dump(),
+    )
+    svc.launch(task.id, request.app.state.session_factory)
+    return TaskOut(id=task.id, type=task.type, status=task.status, progress=task.progress)
 
 
 # ---- 章节 / 追踪读取 ----

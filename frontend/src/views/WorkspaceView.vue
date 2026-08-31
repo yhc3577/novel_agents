@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AgentActivityPanel from '@/components/AgentActivityPanel.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useOutlineStore } from '@/stores/outline'
 import { useProjectsStore } from '@/stores/projects'
 import { useWritingStore } from '@/stores/writing'
 
@@ -12,11 +13,16 @@ const router = useRouter()
 const auth = useAuthStore()
 const projectsStore = useProjectsStore()
 const ws = useWritingStore()
+const os = useOutlineStore()
 
 const pid = computed(() => Number(route.params.id))
 
 const project = computed(() => projectsStore.projects.find((p) => p.id === pid.value))
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
+
+// ---- 侧栏页签 / 开书 ----
+const asideTab = ref('chapters')
+const obScenario = ref('')
 
 // ---- 写下一章 ----
 const scenario = ref('')
@@ -39,6 +45,24 @@ async function onWriteNext(action: 'write_next' | 'daily' = 'write_next') {
 function onCancel() {
   ws.cancel()
   ElMessage.warning('已请求取消')
+}
+
+async function onOpenBook(force: boolean) {
+  try {
+    await os.openBook(pid.value, { scenario: obScenario.value || undefined, force })
+    ElMessage.info(`已发起开书任务 #${os.task?.id}`)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '开书任务发起失败')
+  }
+}
+
+function formatPoint(p: unknown): string {
+  if (typeof p === 'string') return p
+  if (p && typeof p === 'object') {
+    const rec = p as Record<string, unknown>
+    return rec.content ? String(rec.content) : JSON.stringify(rec)
+  }
+  return String(p)
 }
 
 function onSelectChapter(chapterNo: number) {
@@ -65,8 +89,9 @@ watch(
   pid,
   async (id) => {
     ws.reset()
+    os.reset()
     await projectsStore.fetchList()
-    await ws.load(id)
+    await Promise.all([ws.load(id), os.load(id)])
   },
   { immediate: true },
 )
@@ -75,7 +100,10 @@ onMounted(() => {
   if (!auth.user) void auth.fetchMe()
 })
 
-onUnmounted(() => ws.reset())
+onUnmounted(() => {
+  ws.reset()
+  os.reset()
+})
 </script>
 
 <template>
@@ -86,17 +114,56 @@ onUnmounted(() => ws.reset())
         <div class="book-title">{{ project?.title ?? '未知项目' }}</div>
         <div class="book-meta">{{ project?.genre || '未设题材' }} · {{ project?.slug }}</div>
       </div>
-      <div class="chapter-tree">
-        <div class="tree-head">章节</div>
-        <div v-for="c in ws.chapters" :key="c.chapter_no" class="chapter-item" @click="onSelectChapter(c.chapter_no)">
-          <el-tag :type="c.status === 'committed' ? 'success' : 'info'" size="small">
-            {{ c.chapter_no }}
-          </el-tag>
-          <span class="chapter-title">{{ c.title }}</span>
-          <span class="chapter-wc">{{ c.wordcount }}</span>
-        </div>
-        <div v-if="ws.chapters.length === 0" class="tree-empty">还没有章节，点「写下一章」开始</div>
-      </div>
+      <el-tabs v-model="asideTab" class="aside-tabs">
+        <el-tab-pane label="章节" name="chapters">
+          <div class="pane-scroll">
+            <div v-for="c in ws.chapters" :key="c.chapter_no" class="chapter-item" @click="onSelectChapter(c.chapter_no)">
+              <el-tag :type="c.status === 'committed' ? 'success' : 'info'" size="small">
+                {{ c.chapter_no }}
+              </el-tag>
+              <span class="chapter-title">{{ c.title }}</span>
+              <span class="chapter-wc">{{ c.wordcount }}</span>
+            </div>
+            <div v-if="ws.chapters.length === 0" class="tree-empty">还没有章节，点「写下一章」开始</div>
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="大纲" name="outline">
+          <div class="pane-scroll">
+            <!-- 开书进行中：实时进度 -->
+            <AgentActivityPanel v-if="os.running" :events="os.events" />
+            <!-- 已开书：卷 → 章 → 细纲 树 -->
+            <template v-else-if="os.hasOutline && os.outline">
+              <el-collapse v-for="vol in os.outline.volumes" :key="vol.no" class="vol-collapse">
+                <el-collapse-item :title="`第${vol.no}卷 · ${vol.title}`" :name="vol.no">
+                  <div v-for="ch in vol.chapters" :key="ch.chapter_no" class="outline-chapter">
+                    <div class="oc-head">第{{ ch.chapter_no }}章 · {{ ch.title }}</div>
+                    <div v-if="ch.beats.summary" class="oc-summary">{{ ch.beats.summary }}</div>
+                    <div v-if="ch.beats.target_wordcount" class="oc-wc">目标 {{ ch.beats.target_wordcount }} 字</div>
+                    <ul v-if="ch.beats.points?.length" class="oc-points">
+                      <li v-for="(p, i) in ch.beats.points" :key="i">{{ formatPoint(p) }}</li>
+                    </ul>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </template>
+            <!-- 未开书：引导开书 -->
+            <div v-else class="open-book-cta">
+              <div class="cta-title">📖 开书</div>
+              <div class="cta-desc">
+                生成第一卷大纲（卷 → 章 → 细纲）。配置 LLM key 后走真实模型；否则为 demo 确定性大纲。
+              </div>
+              <el-input
+                v-model="obScenario"
+                type="textarea"
+                :rows="3"
+                resize="none"
+                placeholder="开书意图（可选），如：都市修仙 · 废柴崛起"
+              />
+              <el-button type="primary" class="cta-btn" @click="onOpenBook(false)">开始开书</el-button>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-aside>
 
     <el-container>
@@ -108,6 +175,22 @@ onUnmounted(() => ws.reset())
           </el-tag>
         </div>
         <div class="header-actions">
+          <!-- 开书 / 重新开书 -->
+          <el-popconfirm
+            v-if="os.hasOutline && !os.running"
+            title="重新开书会删除现有大纲并重新生成，确定继续？"
+            confirm-button-text="重新开书"
+            cancel-button-text="取消"
+            @confirm="onOpenBook(true)"
+          >
+            <template #reference>
+              <el-button :disabled="ws.running" plain>🔄 重新开书</el-button>
+            </template>
+          </el-popconfirm>
+          <el-button v-else-if="!os.running" :disabled="ws.running" plain @click="onOpenBook(false)">
+            📖 开书
+          </el-button>
+          <el-button v-else type="danger" plain @click="os.cancel()">取消开书</el-button>
           <el-dropdown v-if="!ws.running" trigger="click">
             <el-button type="primary">
               ✍️ 写下一章 <el-icon class="el-icon--right"><i class="el-icon-arrow-down" /></el-icon>
@@ -218,15 +301,91 @@ onUnmounted(() => ws.reset())
   font-size: 12px;
   color: #64748b;
 }
-.chapter-tree {
+.aside-tabs {
   flex: 1;
-  overflow-y: auto;
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 6px 10px 0;
 }
-.tree-head {
+.aside-tabs :deep(.el-tabs__header) {
+  margin-bottom: 6px;
+}
+.aside-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+}
+.aside-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+.pane-scroll {
+  height: 100%;
+  overflow-y: auto;
+}
+.vol-collapse {
+  border: none;
+}
+.vol-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  background: transparent;
+  color: #cbd5e1;
+  border-bottom: 1px solid #2b3442;
+}
+.vol-collapse :deep(.el-collapse-item__wrap) {
+  background: transparent;
+  border-bottom: none;
+}
+.vol-collapse :deep(.el-collapse-item__content) {
+  color: #cbd5e1;
+  padding-bottom: 8px;
+}
+.outline-chapter {
+  padding: 6px 4px;
+  border-bottom: 1px dashed #2b3442;
+}
+.oc-head {
   font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.oc-summary {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.oc-wc {
+  font-size: 11px;
   color: #64748b;
+  margin-top: 2px;
+}
+.oc-points {
+  margin: 4px 0 0;
+  padding-left: 14px;
+}
+.oc-points li {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+.open-book-cta {
+  padding: 4px 2px;
+}
+.cta-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
   margin-bottom: 8px;
+}
+.cta-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.cta-btn {
+  width: 100%;
+  margin-top: 10px;
 }
 .chapter-item {
   display: flex;

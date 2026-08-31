@@ -13,13 +13,14 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
 from app.graphs.ctx import GraphRuntime
-from app.graphs.stub import stub_content, stub_outline, stub_plan, stub_tracking
+from app.graphs.stub import stub_content, stub_tracking
 from app.llm.contracts import OutputContract
 from app.llm.retry import generate_checked
 from app.models import Chapter, OutlineChapter, Project, Setting, TrackingState, Volume
 from app.schemas.tracking import TrackingTx
-from app.schemas.writing import OutlineBeats, WritePlan
+from app.schemas.writing import WritePlan
 from app.services.chapter import ChapterService
+from app.services.outline import generate_outline
 from app.services.context import ContextService
 from app.services.prompt_registry import PromptRegistry
 from app.services.tracking import TrackingService
@@ -157,32 +158,9 @@ def build_write_graph(runtime: GraphRuntime):
         }
 
     async def ensure_outline(state: WriteState) -> WriteState:
+        """无细纲时自动开书；已有则静默跳过（生成逻辑收敛在 app.services.outline）。"""
         pid = state["project_id"]
-        if await _outline_count(pid) > 0:
-            return {}
-        runtime.emit("stage", stage="open-book")
-        runtime.emit("status", progress="开书：生成大纲细纲")
-        if await runtime.factory.available("high"):
-            prompt = reg.build_prompt({
-                "system": reg.render("system/base"),
-                "project": f"【项目】{state['project_text']}",
-                "tracking": "【追踪】尚未开书",
-                "task": "请为一本新书生成第一卷细纲。",
-                "tail": f"【用户意图】{state.get('scenario', '创建大纲')}",
-            })
-            beats = await generate_checked(
-                runtime.factory, "high", prompt, OutputContract(OutlineBeats), task_type="open_book_outline"
-            )
-        else:
-            runtime.emit("status", progress="demo 模式：使用确定性大纲")
-            beats = stub_outline(state.get("scenario", ""), state["project_text"].split("\n")[0] or "新书")
-        vol = Volume(project_id=pid, no=beats.volume_no, title=beats.volume_title)
-        db.add(vol)
-        await db.flush()
-        for c in beats.chapters:
-            db.add(OutlineChapter(volume_id=vol.id, chapter_no=c.chapter_no, title=c.title, beats=c.model_dump()))
-        await db.commit()
-        runtime.emit("status", progress=f"大纲已生成（{len(beats.chapters)} 章）")
+        await generate_outline(db, runtime, project_id=pid, scenario=state.get("scenario", ""))
         return {"max_chapter": await _outline_count(pid)}
 
     async def plan(state: WriteState) -> WriteState:
