@@ -7,10 +7,12 @@ import type {
   ChapterDetail,
   ChapterLite,
   NextChapterPayload,
+  StageStatus,
   Task,
   TrackingContext,
   TrackingInfo,
 } from '@/types/writing'
+import { WRITE_PIPELINE } from '@/types/writing'
 
 export const useWritingStore = defineStore('writing', () => {
   const chapters = ref<ChapterLite[]>([])
@@ -33,6 +35,27 @@ export const useWritingStore = defineStore('writing', () => {
     const cjk = (text.match(/[一-鿿]/g) || []).length
     const words = (text.match(/[A-Za-z0-9_]+/g) || []).length
     return cjk + words
+  })
+
+  /** 写作流水线阶段状态（prepare → planning → writing → submitting）。 */
+  const stageStatus = computed<Record<string, StageStatus>>(() => {
+    const order = WRITE_PIPELINE.map((s) => s.key)
+    const st: Record<string, StageStatus> = {}
+    for (const k of order) st[k] = 'pending'
+    let last = -1
+    for (const ev of events.value) {
+      if (ev.type === 'stage' && order.includes(ev.stage ?? '')) {
+        last = order.indexOf(ev.stage!)
+        st[ev.stage!] = 'running'
+      }
+    }
+    if (task.value?.status === 'success') {
+      for (const k of order) st[k] = 'done'
+    } else if (task.value?.status === 'failed' && last >= 0) {
+      st[order[last]] = 'error'
+    }
+    for (let i = 0; i < last; i++) st[order[i]] = 'done'
+    return st
   })
 
   function reset() {
@@ -154,6 +177,7 @@ export const useWritingStore = defineStore('writing', () => {
     running,
     currentText,
     currentWordcount,
+    stageStatus,
     reset,
     load,
     refresh,

@@ -25,11 +25,19 @@ class NextChapterIn(BaseModel):
     scenario: str = Field(default="", max_length=2000)
     chapter_no: int | None = Field(default=None, ge=1)
     target: int | None = Field(default=None, ge=200, le=50000)
+    resume_stage: str | None = Field(default=None, description="写作重试：从该开书阶段续跑（worldview/outline/beats）")
 
 
 class OpenBookIn(BaseModel):
     scenario: str = Field(default="", max_length=2000, description="开书意图（无 key 时影响 stub 大纲）")
     force: bool = Field(default=False, description="true 时删除旧大纲重新生成")
+    mode: str = Field(default="auto", description="auto=生成即入库；confirm=每阶段草稿待确认")
+    stage: str = Field(default="all", description="all/worldview/outline/beats（重试从该阶段起跑）")
+
+
+class DraftConfirmIn(BaseModel):
+    action: str = Field(..., description="confirm=确认入库 / regenerate=重新生成 / cancel=取消")
+    content: str | None = Field(default=None, description="确认时提交的草稿文本（可修改后入库）")
 
 
 class TaskOut(BaseModel):
@@ -108,6 +116,26 @@ async def cancel_task(
     return TaskOut(id=task.id, type=task.type, status=task.status, progress=task.progress, error="已请求取消" if ok else None)
 
 
+@router.post("/tasks/{task_id}/draft-confirm", response_model=TaskOut)
+async def draft_confirm(
+    task_id: int,
+    payload: DraftConfirmIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """confirm 模式：唤醒暂停的开书任务。confirm 提交可编辑草稿；regenerate 重跑本阶段；cancel 取消。"""
+    task = await _own_task(db, user, task_id)
+    handle = TaskService().registry_get(task_id)
+    if handle is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "任务不存在或已结束")
+    if payload.action == "cancel":
+        TaskService().cancel(task_id)
+    else:
+        handle.resume_payload = payload.model_dump()
+        handle.resume_event.set()
+    return TaskOut(id=task.id, type=task.type, status=task.status, progress=task.progress)
+
+
 @router.get("/tasks/{task_id}/events")
 async def task_events(
     task_id: int,
@@ -143,7 +171,7 @@ async def open_book(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """发起开书任务（后台执行）：已有大纲且未 force 时静默跳过；force=true 覆盖重生成。"""
+    """发起开书任务（后台执行）：世界观→大纲→细纲。auto 生成即入库；confirm 每阶段等确认；stage 指定重试起跑点。"""
     await _own_project(db, user, project_id)
     svc = TaskService()
     task = await svc.create(

@@ -26,6 +26,9 @@ class TaskHandle:
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     background: asyncio.Task | None = None
     finished: bool = False
+    # confirm 模式暂停/恢复：draft-confirm 端点 set resume_event + resume_payload 唤醒
+    resume_event: asyncio.Event = field(default_factory=asyncio.Event)
+    resume_payload: dict | None = None
 
 
 def registry() -> dict[int, TaskHandle]:
@@ -69,6 +72,9 @@ class TaskService:
             return False
         handle.cancel_event.set()
         return True
+
+    def registry_get(self, task_id: int) -> "TaskHandle | None":
+        return _registry.get(task_id)
 
     async def stream_events(self, task_id: int) -> AsyncIterator[dict]:
         """消费任务事件队列，`done` 后终止（SSE 端点使用）。
@@ -123,6 +129,7 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                         "scenario": payload.get("scenario", ""),
                         "chapter_no": payload.get("chapter_no"),
                         "target": payload.get("target"),
+                        "resume_stage": payload.get("resume_stage"),
                     }
                 )
             elif task.type == "router":
@@ -186,14 +193,7 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
                     }
                 )
             elif task.type == "open_book":
-                from app.services.outline import generate_outline
-
-                await generate_outline(
-                    runtime.db, runtime,
-                    project_id=task.project_id,
-                    scenario=payload.get("scenario", ""),
-                    force=bool(payload.get("force")),
-                )
+                await _run_open_book(runtime, handle, task.project_id, payload)
             else:
                 raise ValueError(f"未知任务类型: {task.type}")
             task.status = "success"
@@ -212,3 +212,59 @@ async def run_task(task_id: int, session_factory: async_sessionmaker) -> None:
     handle = _registry.get(task_id)
     if handle is not None:
         handle.finished = True
+
+
+async def _await_draft_confirm(handle: TaskHandle) -> dict:
+    """confirm 模式：挂起等用户确认，返回 resume_payload（confirm/regenerate）。"""
+    while True:
+        handle.resume_event.clear()
+        resume_task = asyncio.create_task(handle.resume_event.wait())
+        cancel_task = asyncio.create_task(handle.cancel_event.wait())
+        try:
+            await asyncio.wait({resume_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            resume_task.cancel()
+            cancel_task.cancel()
+        if handle.cancel_event.is_set():
+            raise TaskCancelled("任务已取消")
+        payload = handle.resume_payload or {}
+        if payload.get("action") in ("confirm", "regenerate"):
+            return payload
+        # 未知 action → 继续等待
+
+
+async def _run_open_book(runtime: GraphRuntime, handle: TaskHandle, project_id: int, payload: dict) -> None:
+    """开书任务：三阶段流水线。auto 模式生成即提交；confirm 模式每阶段暂停等确认。"""
+    from app.services import outline as svc
+
+    scenario = payload.get("scenario", "")
+    force = bool(payload.get("force"))
+    stage = payload.get("stage", "all")
+    mode = payload.get("mode", "auto")
+
+    if stage == "all":
+        if not force and await svc.outline_count(runtime.db, project_id) > 0:
+            return  # 已有大纲且非 force：静默跳过（不发事件）
+        start = svc.STAGE_ORDER[0]
+        if force:
+            await svc.clear_from(runtime.db, project_id, "worldview")
+    else:
+        if stage not in svc.STAGE_ORDER:
+            raise ValueError(f"未知开书阶段: {stage}")
+        start = stage
+        await svc.clear_from(runtime.db, project_id, stage)
+
+    for s in svc.STAGE_ORDER[svc.STAGE_ORDER.index(start):]:
+        while True:
+            draft = await svc.draft_stage(runtime.db, runtime, s, project_id, scenario)
+            if mode != "confirm":
+                await svc.commit_stage(runtime.db, runtime, s, project_id, draft)
+                break
+            handle.queue.put_nowait({"type": "stage_draft", "stage": s, "content": draft})
+            handle.queue.put_nowait({"type": "status", "progress": f"{svc.STAGE_LABELS[s]}草稿已生成，等待确认"})
+            confirmed = await _await_draft_confirm(handle)
+            if confirmed.get("action") == "regenerate":
+                continue
+            content = confirmed.get("content") or draft
+            await svc.commit_stage(runtime.db, runtime, s, project_id, content)
+            break

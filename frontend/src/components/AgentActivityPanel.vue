@@ -16,7 +16,9 @@ watch(
 
 const stageLabel: Record<string, string> = {
   prepare: '准备',
-  'open-book': '开书',
+  worldview: '世界观/设定',
+  outline: '大纲',
+  beats: '细纲',
   planning: '写前规划',
   writing: '正文写作',
   submitting: '提交',
@@ -38,6 +40,10 @@ const stageLabel: Record<string, string> = {
           <el-icon v-if="ev.status === 'running'" class="spin"><i class="el-icon-loading" /></el-icon>
           <span v-else class="tool-status" :class="ev.status">{{ ev.status }}</span>
           <span v-if="ev.duration_ms != null" class="tool-ms">{{ ev.duration_ms }}ms</span>
+        </span>
+        <!-- 开书草稿待确认 -->
+        <span v-else-if="ev.type === 'stage_draft'" class="badge draft-waiting">
+          ✋ {{ stageLabel[ev.stage ?? ''] ?? ev.stage }} 草稿待确认
         </span>
         <!-- 状态进度 -->
         <span v-else-if="ev.type === 'status'" class="badge status">{{ ev.progress }}</span>
@@ -126,6 +132,11 @@ const stageLabel: Record<string, string> = {
 .status {
   background: #fefce8;
   color: #a16207;
+}
+.draft-waiting {
+  background: #fefce8;
+  color: #a16207;
+  font-weight: 600;
 }
 .checkpoint {
   background: #f0fdf4;

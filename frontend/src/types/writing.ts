@@ -34,21 +34,49 @@ export interface NextChapterPayload {
   scenario?: string
   chapter_no?: number
   target?: number
+  resume_stage?: PipelineStage
 }
 
 export interface AgentEvent {
-  type: 'stage' | 'tool' | 'token' | 'checkpoint' | 'status' | 'done' | 'error'
+  type: 'stage' | 'tool' | 'token' | 'checkpoint' | 'status' | 'stage_draft' | 'done' | 'error'
   stage?: string
   tool?: string
   status?: string
   duration_ms?: number
   content?: string
+  /** token 事件的开书阶段标记（worldview/outline/beats），用于把流式内容路由到对应草稿 */
+  stream?: string
   progress?: string
   error?: string
   state_revision?: number
   last_committed_chapter?: number
   views_consistent?: boolean
 }
+
+// ---- 流水线（Pipeline） ----
+
+export type PipelineStage = 'worldview' | 'outline' | 'beats'
+export type StageStatus = 'pending' | 'running' | 'waiting' | 'done' | 'error'
+
+export interface PipelineStep {
+  key: string
+  label: string
+}
+
+/** 开书三阶段流水线：世界观/设定 → 大纲 → 细纲 */
+export const OPEN_BOOK_PIPELINE: PipelineStep[] = [
+  { key: 'worldview', label: '世界观/设定' },
+  { key: 'outline', label: '大纲' },
+  { key: 'beats', label: '细纲' },
+]
+
+/** 写一章流水线：准备 → 规划 → 正文 → 提交 */
+export const WRITE_PIPELINE: PipelineStep[] = [
+  { key: 'prepare', label: '准备' },
+  { key: 'planning', label: '规划' },
+  { key: 'writing', label: '正文' },
+  { key: 'submitting', label: '提交' },
+]
 
 // ---- 开书（大纲） ----
 
@@ -81,4 +109,8 @@ export interface ProjectOutline {
 export interface OpenBookPayload {
   scenario?: string
   force?: boolean
+  /** auto=生成即入库；confirm=每阶段草稿待确认 */
+  mode?: 'auto' | 'confirm'
+  /** 重试起跑点：all 或某阶段（该阶段及其后的产物被清空重生成） */
+  stage?: 'all' | PipelineStage
 }

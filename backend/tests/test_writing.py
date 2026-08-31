@@ -92,7 +92,9 @@ async def test_write_graph_open_book_when_no_outline(db):
     ch = await db.scalar(select(Chapter).where(Chapter.project_id == proj.id, Chapter.chapter_no == 1))
     assert ch is not None and ch.status == "committed"
     events = await collect_events(queue)
-    assert any(e.get("stage") == "open-book" for e in events if e["type"] == "stage")
+    # 开书三阶段流水线：世界观 → 大纲 → 细纲（D13+ 起不再使用 "open-book" 单阶段）
+    stages = [e.get("stage") for e in events if e["type"] == "stage"]
+    assert any(s in ("worldview", "outline", "beats") for s in stages)
 
 
 async def test_write_graph_daily_loop_bounded(db):

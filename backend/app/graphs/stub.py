@@ -4,23 +4,40 @@
 真实 key 配置后自动走 LLM。所有输出都是合法契约 JSON。
 """
 
-from app.schemas.writing import OutlineBeats
+from app.schemas.writing import BeatsDetail, ChapterBeats, OutlineStructure, OutlineStructureChapter, SettingItem, WorldviewBeats
 from app.schemas.tracking import TrackingTx
 
 DEFAULT_TARGET = 2000
 
 
-def stub_outline(user_intent: str, title: str, genre: str = "玄幻") -> OutlineBeats:
+def stub_worldview(user_intent: str, title: str, genre: str = "玄幻") -> str:
+    """确定性世界观/设定草稿（markdown 段落格式，可被 _parse_worldview 解析入库）。"""
     theme = title or "无名之书"
-    chapters = [
-        {"chapter_no": 1, "title": "苏醒", "summary": f"{theme}的{genre}主角从一场异变中苏醒，获得金手指，遭遇首个冲突。", "target_wordcount": DEFAULT_TARGET},
-        {"chapter_no": 2, "title": "试炼", "summary": f"主角初步运用金手指应对挑战，结识关键伙伴，埋下宿敌线索。", "target_wordcount": DEFAULT_TARGET},
-        {"chapter_no": 3, "title": "初露锋芒", "summary": f"主角在公开场合展现实力，引来注意，卷尾冲突爆发。", "target_wordcount": DEFAULT_TARGET},
-    ]
-    return OutlineBeats(
-        volume_no=1,
-        volume_title="第一卷·风起",
-        chapters=[{**c, "chapter_no": i + 1} for i, c in enumerate(chapters)],
+    return (
+        f"## 世界观\n{theme}（{genre}）中灵气复苏，力量体系自成一系，宗门林立、秘境无数。\n"
+        f"## 人设\n主角：{user_intent or '陈玄'}，出身平凡却身负神秘玉佩，性格坚韧。\n"
+        "## 金手指\n神秘玉佩：危机时发烫预警，可加速修炼、参悟功法。\n"
+        "## 势力\n天玄宗：本界顶级宗门，卷末将登场，为主角宿敌线索。\n"
+    )
+
+
+def stub_outline_structure(user_intent: str, title: str, genre: str = "玄幻") -> str:
+    """确定性卷/章大纲草稿（格式：卷名：… + 第N章 标题）。"""
+    chapters = "\n".join(
+        f"第{i + 1}章 {name}" for i, name in enumerate(["苏醒", "试炼", "初露锋芒"])
+    )
+    return f"卷名：第一卷·风起\n{chapters}"
+
+
+def stub_chapter_beats() -> str:
+    """确定性细纲草稿（格式：每章 摘要：… / 情节点：- …）。"""
+    return (
+        "第1章 苏醒\n摘要：主角从一场异变中苏醒，获得金手指，遭遇首个冲突。\n情节点：\n"
+        "- 天泛青白，主角自废墟中醒来\n- 玉佩发烫预警，金手指觉醒\n\n"
+        "第2章 试炼\n摘要：主角初步运用金手指应对挑战，结识关键伙伴，埋下宿敌线索。\n情节点：\n"
+        "- 街头遭遇悬赏榜，卷入风波\n- 危急关头玉佩显威\n\n"
+        "第3章 初露锋芒\n摘要：主角在公开场合展现实力，引来注意，卷尾冲突爆发。\n情节点：\n"
+        "- 出手解围，震慑众人\n- 卷尾强敌压境，悬念收束\n"
     )
 
 

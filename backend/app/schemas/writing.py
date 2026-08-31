@@ -18,17 +18,38 @@ class LengthDecision(BaseModel):
     chapters: int = Field(..., ge=1, le=2000)
 
 
-class OutlineChapterItem(BaseModel):
+class SettingItem(BaseModel):
+    kind: str = Field(..., max_length=32)
+    title: str = Field(default="", max_length=128)
+    content: str = ""
+
+
+class WorldviewBeats(BaseModel):
+    settings: list[SettingItem] = Field(default_factory=list)
+
+
+class OutlineStructureChapter(BaseModel):
     chapter_no: int = Field(..., ge=1)
-    title: str = Field(..., min_length=1, max_length=64)
-    summary: str = Field(..., min_length=1)
-    target_wordcount: int | None = Field(default=2000, ge=200, le=20000)
+    title: str = Field(..., max_length=64)
 
 
-class OutlineBeats(BaseModel):
+class OutlineStructure(BaseModel):
     volume_no: int = Field(default=1, ge=1)
-    volume_title: str = Field(..., min_length=1)
-    chapters: list[OutlineChapterItem] = Field(..., min_length=1)
+    volume_title: str = Field(default="第一卷")
+    synopsis: str = ""
+    chapters: list[OutlineStructureChapter] = Field(default_factory=list)
+
+
+class ChapterBeats(BaseModel):
+    chapter_no: int = Field(..., ge=1)
+    title: str = ""
+    summary: str = ""
+    target_wordcount: int = Field(default=2000, ge=200, le=20000)
+    points: list[str] = Field(default_factory=list)
+
+
+class BeatsDetail(BaseModel):
+    chapters: list[ChapterBeats] = Field(default_factory=list)
 
 
 class WritePlan(BaseModel):

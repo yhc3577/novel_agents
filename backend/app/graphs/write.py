@@ -42,6 +42,7 @@ class WriteState(TypedDict, total=False):
     target: int | None
     max_chapter: int
     iterations: int
+    resume_stage: str | None  # 写作重试：开书子阶段续跑点
     project_text: str
     context_view: str
     recall_pack: dict
@@ -158,9 +159,12 @@ def build_write_graph(runtime: GraphRuntime):
         }
 
     async def ensure_outline(state: WriteState) -> WriteState:
-        """无细纲时自动开书；已有则静默跳过（生成逻辑收敛在 app.services.outline）。"""
+        """无细纲时自动开书；已有则静默跳过（生成逻辑收敛在 app.services.outline）。
+        写作重试时 resume_stage 透传给开书流水线，从指定阶段续跑。"""
         pid = state["project_id"]
-        await generate_outline(db, runtime, project_id=pid, scenario=state.get("scenario", ""))
+        await generate_outline(
+            db, runtime, project_id=pid, scenario=state.get("scenario", ""), stage=state.get("resume_stage") or "all"
+        )
         return {"max_chapter": await _outline_count(pid)}
 
     async def plan(state: WriteState) -> WriteState:

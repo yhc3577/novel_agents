@@ -3,10 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AgentActivityPanel from '@/components/AgentActivityPanel.vue'
+import DraftConfirmDialog from '@/components/DraftConfirmDialog.vue'
+import PipelineBar from '@/components/PipelineBar.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useOutlineStore } from '@/stores/outline'
 import { useProjectsStore } from '@/stores/projects'
 import { useWritingStore } from '@/stores/writing'
+import type { PipelineStage } from '@/types/writing'
+import { OPEN_BOOK_PIPELINE, WRITE_PIPELINE } from '@/types/writing'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,6 +57,41 @@ async function onOpenBook(force: boolean) {
     ElMessage.info(`已发起开书任务 #${os.task?.id}`)
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '开书任务发起失败')
+  }
+}
+
+const currentStageLabel = computed(
+  () => OPEN_BOOK_PIPELINE.find((s) => s.key === os.currentStage)?.label ?? os.currentStage ?? '',
+)
+const currentStageText = computed(() => (os.currentStage ? (os.stageDrafts[os.currentStage] ?? '') : ''))
+
+/** 流水线点击重跑：从该阶段重新生成（该阶段及其后清空，上游保留）。 */
+async function onRetryStage(stage: string) {
+  if (os.running || ws.running) return
+  try {
+    await os.retryStage(pid.value, stage as PipelineStage)
+    const label = OPEN_BOOK_PIPELINE.find((s) => s.key === stage)?.label ?? stage
+    ElMessage.info(`已从「${label}」重新生成`)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '重跑阶段失败')
+  }
+}
+
+async function onConfirmDraft(content: string) {
+  try {
+    await os.confirmDraft(content)
+    ElMessage.success('已确认入库，继续下一阶段')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '确认失败')
+  }
+}
+
+async function onRegenerateDraft() {
+  try {
+    await os.regenerateDraft()
+    ElMessage.info('正在重新生成本阶段')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '重新生成失败')
   }
 }
 
@@ -217,6 +256,39 @@ onUnmounted(() => {
         </div>
       </el-header>
 
+      <!-- 顶部横向 Pipeline：开书三阶段 + 写作四阶段 -->
+      <div class="pipeline-zone">
+        <PipelineBar
+          :stages="OPEN_BOOK_PIPELINE"
+          :status="os.stageStatus"
+          title="开书"
+          clickable
+          @retry="onRetryStage"
+        />
+        <el-segmented
+          v-model="os.mode"
+          class="ob-mode"
+          :disabled="os.running || ws.running"
+          :options="[
+            { label: '自动入库', value: 'auto' },
+            { label: '确认入库', value: 'confirm' },
+          ]"
+          aria-label="开书模式"
+        />
+      </div>
+      <div v-if="ws.events.length > 0 || ws.running" class="pipeline-zone write">
+        <PipelineBar :stages="WRITE_PIPELINE" :status="ws.stageStatus" title="写作" />
+      </div>
+
+      <!-- 开书阶段草稿实时流式预览 -->
+      <div v-if="os.running && os.currentStage" class="draft-preview">
+        <div class="draft-preview-head">
+          <span>「{{ currentStageLabel }}」草稿 · 流式预览</span>
+          <span class="draft-preview-wc">{{ currentStageText.length }} 字</span>
+        </div>
+        <pre class="draft-preview-body">{{ currentStageText }}</pre>
+      </div>
+
       <el-main class="main">
         <el-row :gutter="16" class="main-row">
           <!-- 编辑器 -->
@@ -270,6 +342,16 @@ onUnmounted(() => {
         </el-row>
       </el-main>
     </el-container>
+
+    <!-- confirm 模式：阶段草稿待确认弹窗 -->
+    <DraftConfirmDialog
+      :visible="os.waiting"
+      :stage="os.waitingDraft?.stage ?? ''"
+      :content="os.waitingDraft?.content ?? ''"
+      @confirm="onConfirmDraft"
+      @regenerate="onRegenerateDraft"
+      @cancel="os.cancel()"
+    />
   </el-container>
 </template>
 
@@ -414,6 +496,54 @@ onUnmounted(() => {
   color: #64748b;
   text-align: center;
   padding: 24px 0;
+}
+.pipeline-zone {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff;
+  border-bottom: 1px solid #eef2f7;
+  padding: 8px 20px;
+}
+.pipeline-zone.write {
+  padding-top: 0;
+  border-top: 1px dashed #eef2f7;
+}
+.ob-mode {
+  flex-shrink: 0;
+}
+.draft-preview {
+  background: #fff;
+  border-bottom: 1px solid #eef2f7;
+  padding: 6px 20px 12px;
+}
+.draft-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.draft-preview-wc {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.draft-preview-body {
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #334155;
+  font-family: 'Songti SC', 'SimSun', Georgia, serif;
+  margin: 0;
 }
 .header {
   display: flex;

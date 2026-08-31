@@ -1,7 +1,10 @@
+import os
+import tempfile
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 import app.models  # noqa: F401  ensure models are registered
 from app.db.base import Base
@@ -11,15 +14,24 @@ from app.main import create_app
 
 @pytest.fixture
 async def db_engine():
+    """每个测试一个独立文件库 + NullPool：每次 checkout 新连接。
+
+    后台任务会话与 HTTP 请求会话各自独立连接（与生产一致），
+    避免共享单连接（StaticPool :memory:）时事务互相打断。
+    """
+    fd, path = tempfile.mkstemp(prefix="novel_agents_test_", suffix=".db")
+    os.close(fd)
     engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        f"sqlite+aiosqlite:///{path}",
+        poolclass=NullPool,
+        connect_args={"check_same_thread": False, "timeout": 30},
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()
+    if os.path.exists(path):
+        os.unlink(path)
 
 
 @pytest.fixture
@@ -40,7 +52,7 @@ async def client_app(db_engine):
 
     app = create_app()
     app.dependency_overrides[get_db] = _get_db
-    # 后台任务（写章/SSE）与测试共用同一内存库
+    # 后台任务（写章/SSE）与测试共用同一文件库
     app.state.session_factory = session_factory
 
     yield app
