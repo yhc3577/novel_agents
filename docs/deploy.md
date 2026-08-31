@@ -39,6 +39,13 @@ curl http://localhost:8080/api/auth/me     # 未带 token → 401（预期）
 | `REDIS_URL` | 空 | 非空启用 Redis（KV 缓存 + 章节锁），否则 **PG 回源**，功能等价 |
 | `KV_CACHE_ENABLED` | `true` | `false` 时禁用缓存/锁（功能等价，无缓存） |
 
+## 大模型配置
+
+- 启动时 backend 依次执行 `python -m app.db.init_db`（幂等建表）→ `python -m scripts.seed_providers`（把 `config/models.yaml` 的 6 家供应商 upsert 进 `providers` 表，api_key 留空）。
+- **填 key**：登录后「设置」页，对每个供应商填 `api_key` → 保存（Fernet 加密落库 `providers.api_key_enc`）。
+- **改模型/厂商**：编辑 `backend/config/models.yaml`（三档 high/mid/low、base_url、降级 priority）后重新 `docker compose up --build -d`。
+- 未配置任何 key 时，写作/审查等任务走确定性 **demo 模式**（stub），前端会有提示。
+
 ## 数据库
 
 - 启动时 backend 执行 `python -m app.db.init_db`（`Base.metadata.create_all`，幂等，仅补缺失表）。

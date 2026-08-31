@@ -11,6 +11,7 @@ COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/prompts ./prompts
 COPY backend/config ./config
+COPY backend/scripts ./scripts
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/migrations ./migrations
 
@@ -18,5 +19,5 @@ RUN pip install --no-cache-dir -e .
 
 EXPOSE 8000
 
-# 先幂等建表，再启动 uvicorn
-CMD ["sh", "-c", "python -m app.db.init_db && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# 幂等建表 → 幂等 seed 供应商（models.yaml → providers 表，api_key 留空待设置页填）→ 启动 uvicorn
+CMD ["sh", "-c", "python -m app.db.init_db && python -m scripts.seed_providers && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
