@@ -36,13 +36,6 @@ const router = createRouter({
           meta: { requiresAuth: true, title: '项目详情' },
         },
         {
-          // 旧工作台兜底路由：Task 10 移除本路由（/projects/:id 详情页为唯一入口）
-          path: 'projects/:id/workspace',
-          name: 'workspace-legacy',
-          component: () => import('@/views/WorkspaceView.vue'),
-          meta: { requiresAuth: true, title: '写作工作台' },
-        },
-        {
           path: 'projects/:id/review',
           name: 'outline-review',
           component: () => import('@/views/OutlineReviewView.vue'),
