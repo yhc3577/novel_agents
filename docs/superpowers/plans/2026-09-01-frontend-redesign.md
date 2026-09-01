@@ -720,7 +720,7 @@ export default router
 
 具体到每个视图的最小改动：
 
-- **DashboardView.vue**：删除整个侧栏与顶栏模板 + 相关样式与 `onLogout/displayName`；保留欢迎卡、项目网格、新建项目对话框。`<template>` 顶层改为 `<div class="page-container">…</div>`。
+- **DashboardView.vue**：删除整个侧栏与顶栏模板 + 相关样式与 `onLogout/displayName`；**同时删除「欢迎回来，{{ displayName }}」欢迎卡**（它引用 `displayName`，删变量会 typecheck 失败；Task 4 会整体重绘为统计卡）。保留项目网格、新建项目对话框。`<template>` 顶层改为 `<div class="page-container">…</div>`。
 - **AnalysisView.vue / ScanView.vue / UsageView.vue / SettingsView.vue / QualityView.vue**：同法——删布局骨架与 `onLogout/displayName`，`el-main` 内容改包 `.page-container`。
 - **WorkspaceView.vue**：删布局骨架；其内部 `el-header` 的操作区（开书/写下一章按钮、用户下拉）中「用户下拉」删除（AppLayout 顶栏已有），**操作按钮保留在页面顶部**；`aside` 的「章节/大纲」页签区改为页面内容。本任务只做「骨架外移 + 内容可读」，深度重绘交给 Task 6-9。
 
