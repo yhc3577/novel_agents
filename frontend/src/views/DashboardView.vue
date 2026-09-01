@@ -47,6 +47,15 @@ async function onCreate() {
   })
 }
 
+async function onActivate(id: number) {
+  try {
+    await projectsStore.activate(id)
+    ElMessage.success('已设为活跃书')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '设置活跃书失败')
+  }
+}
+
 // ---- 统计 ----
 const activeCount = computed(() => projectsStore.projects.filter((p) => p.status === 'active').length)
 const inactiveCount = computed(() => projectsStore.projects.filter((p) => p.status !== 'active').length)
@@ -105,7 +114,16 @@ onMounted(async () => {
         </div>
         <div class="novel-card-foot">
           <span class="novel-card-date">{{ fmtDate(p.created_at) }}</span>
-          <span class="novel-card-enter">进入项目 →</span>
+          <span class="novel-card-actions">
+            <el-button
+              v-if="p.status !== 'active'"
+              size="small"
+              plain
+              class="novel-card-activate"
+              @click.stop="onActivate(p.id)"
+            >设为活跃书</el-button>
+            <span class="novel-card-enter">进入项目 →</span>
+          </span>
         </div>
       </div>
     </div>
@@ -213,6 +231,16 @@ onMounted(async () => {
 
 .novel-card-date {
   color: var(--color-text-secondary);
+}
+
+.novel-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.novel-card-activate {
+  margin: 0;
 }
 
 .novel-card-enter {
