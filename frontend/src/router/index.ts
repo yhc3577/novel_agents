@@ -28,8 +28,7 @@ const router = createRouter({
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true, title: '工作台' },
         },
-        // NOTE Task 7 已落地（review）；Task 8/9 的页面文件尚未创建，路由项保持「注释」通过
-        // typecheck，落地时依次取消注释（console/chapters 已挂到 NovelDetailView 的按钮）。
+        // NOTE Task 7/8 已落地（console 已打开）；Task 9 的 ChapterView 尚未创建，路由项保持「注释」。
         {
           path: 'projects/:id',
           name: 'novel-detail',
@@ -49,12 +48,12 @@ const router = createRouter({
           component: () => import('@/views/OutlineReviewView.vue'),
           meta: { requiresAuth: true, title: '大纲审核' },
         },
-        // {
-        //   path: 'projects/:id/console',
-        //   name: 'console',
-        //   component: () => import('@/views/ConsoleView.vue'),
-        //   meta: { requiresAuth: true, title: '创作控制台' },
-        // },
+        {
+          path: 'projects/:id/console',
+          name: 'console',
+          component: () => import('@/views/ConsoleView.vue'),
+          meta: { requiresAuth: true, title: '创作控制台' },
+        },
         // {
         //   path: 'projects/:id/chapters/:chapterNo',
         //   name: 'chapter-view',
