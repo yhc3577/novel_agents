@@ -157,7 +157,7 @@ onMounted(async () => {
         <div class="section-card detail-card">
           <div class="detail-head">
             <span class="detail-book-title">
-              {{ currentChapter ? `第 ${currentChapter.chapter_no} 章` : '审查 · 去味' }}
+              {{ currentChapter ? `第 ${currentChapter.chapter_no} 章` : '未选择章节' }}
             </span>
             <div class="detail-head-right">
               <el-tag v-if="quality.running" type="warning" size="small" effect="dark">

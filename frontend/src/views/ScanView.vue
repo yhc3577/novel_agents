@@ -106,7 +106,7 @@ onMounted(async () => {
               <!-- 榜单表格 -->
               <div class="sub-section">
                 <h3 class="section-title sub-title">榜单 Top {{ Math.min(10, p.cleaned.books.length) }}</h3>
-                <el-table :data="p.cleaned.books.slice(0, 10)" size="small" class="book-table">
+                <el-table :data="p.cleaned.books.slice(0, 10)" size="small">
                   <el-table-column prop="rank" label="#" width="40" />
                   <el-table-column prop="title" label="书名" min-width="140" show-overflow-tooltip />
                   <el-table-column prop="genre" label="题材" width="56" />
@@ -139,7 +139,7 @@ onMounted(async () => {
       <el-tab-pane label="🗂 历史快照" name="history">
         <el-empty v-if="!scan.history.length" description="暂无历史扫榜记录" />
         <div v-else class="section-card">
-          <el-table :data="scan.history" size="small" class="history-table">
+          <el-table :data="scan.history" size="small">
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column label="平台" width="80">
               <template #default="{ row }">{{ PLATFORM_NAMES[row.platform] ?? row.platform }}</template>
