@@ -48,45 +48,46 @@ onMounted(async () => {
 
 <template>
   <div class="page-container" v-loading="usage.loading">
-    <div class="days-bar">
-      <el-radio-group :model-value="usage.days" @update:model-value="(v: number | string | boolean | undefined) => usage.setDays(Number(v))">
-        <el-radio-button :value="7">近 7 天</el-radio-button>
-        <el-radio-button :value="30">近 30 天</el-radio-button>
-        <el-radio-button :value="90">近 90 天</el-radio-button>
-      </el-radio-group>
+    <div class="page-header">
+      <h1 class="page-title">用量</h1>
+      <div class="days-bar">
+        <el-radio-group :model-value="usage.days" @update:model-value="(v: number | string | boolean | undefined) => usage.setDays(Number(v))">
+          <el-radio-button :value="7">近 7 天</el-radio-button>
+          <el-radio-button :value="30">近 30 天</el-radio-button>
+          <el-radio-button :value="90">近 90 天</el-radio-button>
+        </el-radio-group>
+      </div>
     </div>
 
     <el-empty v-if="!totals || totals.calls === 0" description="暂无 LLM 调用记录" />
 
     <template v-else>
-      <!-- 汇总卡片 -->
-      <el-row :gutter="16" class="cards">
-        <el-col :span="6"><el-card shadow="never" class="stat"><div class="stat-val">{{ totals.calls }}</div><div class="stat-label">调用次数</div></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never" class="stat"><div class="stat-val">{{ fmt(totals.tokens) }}</div><div class="stat-label">总 token</div></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never" class="stat"><div class="stat-val">{{ fmtCost(totals.cost) }}</div><div class="stat-label">估算成本</div></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never" class="stat"><div class="stat-val">{{ Math.round(totals.cache_hit_rate * 100) }}%</div><div class="stat-label">缓存命中率</div></el-card></el-col>
-      </el-row>
+      <!-- 汇总统计卡 -->
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-value">{{ totals.calls }}</div><div class="stat-label">调用次数</div></div>
+        <div class="stat-card"><div class="stat-value">{{ fmt(totals.tokens) }}</div><div class="stat-label">总 token</div></div>
+        <div class="stat-card"><div class="stat-value">{{ fmtCost(totals.cost) }}</div><div class="stat-label">估算成本</div></div>
+        <div class="stat-card"><div class="stat-value">{{ Math.round(totals.cache_hit_rate * 100) }}%</div><div class="stat-label">缓存命中率</div></div>
+      </div>
 
-      <el-row :gutter="16">
+      <div class="usage-grid">
         <!-- 每日曲线 -->
-        <el-col :span="14">
-          <el-card shadow="never" class="chart-card">
-            <template #header>每日 token</template>
-            <div class="bars">
-              <el-tooltip v-for="d in daily" :key="d.date" :content="`${d.date} · ${fmt(d.tokens)} tokens · ${d.calls} 次`" placement="top">
-                <div class="bar-col">
-                  <div class="bar" :style="{ height: `${Math.max(3, (d.tokens / maxDailyTokens) * 160)}px` }"></div>
-                  <div class="bar-date">{{ d.date.slice(5) }}</div>
-                </div>
-              </el-tooltip>
-            </div>
-          </el-card>
-        </el-col>
+        <div class="section-card chart-card">
+          <h3 class="section-title">每日 token</h3>
+          <div class="bars">
+            <el-tooltip v-for="d in daily" :key="d.date" :content="`${d.date} · ${fmt(d.tokens)} tokens · ${d.calls} 次`" placement="top">
+              <div class="bar-col">
+                <div class="bar" :style="{ height: `${Math.max(3, (d.tokens / maxDailyTokens) * 160)}px` }"></div>
+                <div class="bar-date">{{ d.date.slice(5) }}</div>
+              </div>
+            </el-tooltip>
+          </div>
+        </div>
 
         <!-- 分布 -->
-        <el-col :span="10">
-          <el-card shadow="never" class="chart-card">
-            <template #header>按任务类型</template>
+        <div class="side-col">
+          <div class="section-card chart-card">
+            <h3 class="section-title">按任务类型</h3>
             <el-table :data="usage.summary!.by_task_type" size="small" class="mini-table">
               <el-table-column label="任务" min-width="90">
                 <template #default="{ row }">{{ taskLabel(row.task_type) }}</template>
@@ -99,10 +100,10 @@ onMounted(async () => {
                 <template #default="{ row }">{{ fmtCost(row.cost) }}</template>
               </el-table-column>
             </el-table>
-          </el-card>
+          </div>
 
-          <el-card shadow="never" class="chart-card">
-            <template #header>按 Provider</template>
+          <div class="section-card chart-card">
+            <h3 class="section-title">按 Provider</h3>
             <el-table :data="usage.summary!.by_provider" size="small" class="mini-table">
               <el-table-column prop="provider" label="Provider" min-width="90" />
               <el-table-column label="调用" width="60" prop="calls" />
@@ -113,35 +114,52 @@ onMounted(async () => {
                 <template #default="{ row }">{{ fmtCost(row.cost) }}</template>
               </el-table-column>
             </el-table>
-          </el-card>
-        </el-col>
-      </el-row>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .days-bar {
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
 }
-.cards {
-  margin-bottom: 16px;
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
 }
-.stat {
-  text-align: center;
-}
-.stat-val {
-  font-size: 26px;
-  font-weight: 700;
-  color: #1f2937;
+.stat-value {
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 .stat-label {
-  font-size: 12px;
-  color: #9ca3af;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
+.usage-grid {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+.side-col {
+  display: flex;
+  flex-direction: column;
+}
 .chart-card {
-  margin-bottom: 16px;
+  margin-bottom: 0;
+}
+.side-col .chart-card {
+  margin-bottom: var(--space-lg);
+}
+.side-col .chart-card:last-child {
+  margin-bottom: 0;
 }
 .bars {
   display: flex;
@@ -160,14 +178,17 @@ onMounted(async () => {
 }
 .bar {
   width: 18px;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, #6366f1, #818cf8);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: linear-gradient(180deg, var(--color-primary-light), var(--color-primary));
 }
 .bar-date {
   font-size: 10px;
-  color: #9ca3af;
+  color: var(--color-text-secondary);
 }
 .mini-table {
   width: 100%;
+}
+:deep(.el-table__body tr:hover > td.el-table__cell) {
+  background: var(--color-bg-page);
 }
 </style>

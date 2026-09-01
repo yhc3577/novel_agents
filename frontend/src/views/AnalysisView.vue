@@ -66,11 +66,15 @@ onMounted(async () => {
 
 <template>
   <div class="page-container">
-    <el-row :gutter="16">
-      <!-- 上传 -->
+    <div class="page-header">
+      <h1 class="page-title">拆文库</h1>
+    </div>
+
+    <el-row :gutter="16" class="layout-row">
+      <!-- 左列：上传 + 拆书列表 -->
       <el-col :span="8">
-        <el-card shadow="never" class="upload-card">
-          <template #header>📤 上传整本书</template>
+        <div class="section-card">
+          <h3 class="section-title">📤 上传整本书</h3>
           <el-input v-model="form.title" placeholder="书名，如：仙路问道" maxlength="128" class="mb" />
           <el-input v-model="form.genre" placeholder="题材（可选），如：玄幻" maxlength="64" class="mb" />
           <el-input
@@ -82,11 +86,10 @@ onMounted(async () => {
           <el-button type="primary" class="upload-btn" :loading="store.running" @click="onUpload">
             上传并拆解
           </el-button>
-        </el-card>
+        </div>
 
-        <!-- 书列表 -->
-        <el-card shadow="never" class="list-card">
-          <template #header>我的拆文书（{{ store.books.length }}）</template>
+        <div class="section-card">
+          <h3 class="section-title">我的拆文书（{{ store.books.length }}）</h3>
           <div v-if="store.books.length === 0" class="empty">还没有拆文书</div>
           <div
             v-for="b in store.books"
@@ -97,7 +100,10 @@ onMounted(async () => {
           >
             <div class="book-row-head">
               <span class="book-title">{{ b.title }}</span>
-              <el-tag :type="b.status === 'done' ? 'success' : b.status === 'imported' ? 'primary' : 'info'" size="small">
+              <el-tag
+                :type="b.status === 'done' || b.status === 'imported' ? 'success' : b.status === 'failed' ? 'danger' : 'warning'"
+                size="small"
+              >
                 {{ b.status }}
               </el-tag>
             </div>
@@ -106,23 +112,21 @@ onMounted(async () => {
               <el-button size="small" type="success" :loading="store.importing" @click.stop="onImport">一键导入</el-button>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
-      <!-- 拆解结果 -->
+      <!-- 右列：拆解结果 -->
       <el-col :span="16">
-        <el-card shadow="never" class="detail-card" v-loading="!store.snapshot">
-          <template #header>
-            <div class="detail-head">
-              <span>{{ selectedBook?.title ?? '请选择或上传一本书' }}</span>
-              <div class="detail-head-right">
-                <span v-if="store.snapshot" class="stage-pct">{{ stageDone }}/{{ stageTotal }} 阶段完成</span>
-                <el-tag v-if="store.running" type="warning" size="small" effect="dark">
-                  拆解中{{ store.task?.progress ? ` · ${store.task.progress}` : '' }}
-                </el-tag>
-              </div>
+        <div class="section-card detail-card" v-loading="!store.snapshot">
+          <div class="detail-head">
+            <span class="detail-book-title">{{ selectedBook?.title ?? '请选择或上传一本书' }}</span>
+            <div class="detail-head-right">
+              <span v-if="store.snapshot" class="stage-pct">{{ stageDone }}/{{ stageTotal }} 阶段完成</span>
+              <el-tag v-if="store.running" type="warning" size="small" effect="dark">
+                拆解中{{ store.task?.progress ? ` · ${store.task.progress}` : '' }}
+              </el-tag>
             </div>
-          </template>
+          </div>
 
           <el-tabs v-if="store.snapshot">
             <el-tab-pane label="报告" name="report">
@@ -148,39 +152,43 @@ onMounted(async () => {
               <AgentActivityPanel :events="store.events" />
             </el-tab-pane>
           </el-tabs>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
 </template>
 
 <style scoped>
+.layout-row {
+  align-items: flex-start;
+}
 .mb {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-sm);
 }
 .upload-btn {
-  margin-top: 12px;
+  margin-top: var(--space-md);
   width: 100%;
 }
-.list-card {
-  margin-top: 16px;
-}
 .empty {
-  color: #9ca3af;
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
   text-align: center;
-  padding: 16px 0;
+  padding: var(--space-md) 0;
 }
 .book-row {
-  padding: 8px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
   cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.book-row:hover {
+  background: var(--color-bg-page);
 }
 .book-row.active {
-  border-color: var(--brand);
-  background: #f0f7ff;
+  border-color: var(--color-primary);
+  background: var(--color-primary-lighter);
 }
 .book-row-head {
   display: flex;
@@ -190,8 +198,8 @@ onMounted(async () => {
 }
 .book-title {
   font-weight: 600;
-  font-size: 14px;
-  color: #1f2937;
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
 }
 .book-row-foot {
   display: flex;
@@ -204,52 +212,62 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: var(--space-md);
+}
+.detail-book-title {
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
 }
 .detail-head-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-sm);
 }
 .stage-pct {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 .report {
   white-space: pre-wrap;
   word-break: break-all;
   font-family: inherit;
-  background: #f8fafc;
-  border: 1px solid #eef2f7;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 13px;
+  background: var(--color-bg-page);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  font-size: var(--font-size-sm);
   line-height: 1.8;
-  color: #334155;
+  color: var(--color-text-regular);
 }
 .agg {
   white-space: pre-wrap;
   word-break: break-all;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   line-height: 1.7;
-  color: #334155;
+  color: var(--color-text-regular);
   margin: 0;
 }
 .chapter-card {
-  border: 1px solid #eef2f7;
-  border-radius: 8px;
-  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 10px var(--space-md);
   margin-bottom: 10px;
 }
 .chapter-head {
   font-weight: 600;
-  font-size: 13px;
-  color: #1f2937;
-  margin-bottom: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-xs);
 }
 .chapter-summary {
-  font-size: 13px;
-  color: #475569;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-regular);
   margin-bottom: 6px;
 }
 .beats {

@@ -83,9 +83,13 @@ onMounted(async () => {
 
 <template>
   <div class="page-container">
+    <div class="page-header">
+      <h1 class="page-title">设置</h1>
+    </div>
+
     <!-- 三档模型选择 -->
-    <el-card shadow="never" class="mb">
-      <template #header>三档模型选择（改完立即生效）</template>
+    <div class="section-card">
+      <h3 class="section-title">三档模型选择（改完立即生效）</h3>
       <div class="tier-row" v-for="tier in ['high', 'mid', 'low']" :key="tier">
         <span class="tier-label">{{ TIER_LABEL[tier] }}</span>
         <el-select :model-value="store.tiers[tier as 'high' | 'mid' | 'low']" placeholder="跟随默认" clearable class="tier-select" @update:model-value="(v: string | null) => selectTier(tier, v)">
@@ -98,19 +102,19 @@ onMounted(async () => {
         </el-select>
       </div>
       <el-button type="primary" @click="onSaveTiers">保存三档选择</el-button>
-    </el-card>
+    </div>
 
     <!-- 供应商列表 -->
-    <el-card shadow="never">
-      <template #header>模型供应商（{{ store.providers.length }}）</template>
+    <div class="section-card">
+      <h3 class="section-title">模型供应商（{{ store.providers.length }}）</h3>
       <div v-if="store.providers.length === 0" class="empty">
         暂无供应商。请运行 seed_providers 脚本或等待后端首启种子。
       </div>
-      <div v-for="p in store.providers" :key="p.id" class="provider-card">
+      <div v-for="p in store.providers" :key="p.id" class="provider-card" :class="{ 'is-active': p.enabled }">
         <div class="provider-head">
           <span class="provider-name">{{ p.name }}</span>
           <div class="provider-head-right">
-            <el-tag :type="p.enabled ? 'success' : 'info'" size="small">{{ p.enabled ? '启用' : '停用' }}</el-tag>
+            <el-tag :type="p.enabled ? 'success' : 'info'" size="small">{{ p.enabled ? '使用中' : '停用' }}</el-tag>
             <el-tag v-if="p.has_key" type="primary" size="small">key 已配置</el-tag>
             <el-tag v-else type="warning" size="small">未配置 key</el-tag>
             <el-button size="small" :loading="store.testing[p.id]" @click="onTest(p)">测试连通</el-button>
@@ -153,69 +157,74 @@ onMounted(async () => {
           <el-button size="small" @click="onSaveKey(p)">保存 api_key</el-button>
         </div>
       </div>
-    </el-card>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.mb {
-  margin-bottom: 16px;
-}
 .empty {
-  color: #9ca3af;
-  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
   text-align: center;
-  padding: 16px 0;
+  padding: var(--space-md) 0;
 }
 .tier-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 .tier-label {
   width: 130px;
-  font-size: 13px;
-  color: #374151;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-regular);
 }
 .tier-select {
   width: 320px;
 }
 .provider-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.provider-card.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-lighter);
 }
 .provider-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 .provider-name {
   font-weight: 600;
-  font-size: 15px;
-  color: #1f2937;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
 }
 .provider-head-right {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .test-result {
-  font-size: 12px;
-  border-radius: 6px;
-  padding: 4px 8px;
-  margin-bottom: 8px;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 .test-result.ok {
-  background: #f0fdf4;
-  color: #15803d;
+  background: var(--color-success-light);
+  color: var(--color-success);
 }
 .test-result.fail {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--color-danger-light);
+  color: var(--color-danger);
 }
 .provider-body {
   display: grid;
@@ -225,18 +234,18 @@ onMounted(async () => {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs);
 }
 .field-label {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 .enable-switch {
-  margin-top: 8px;
+  margin-top: var(--space-sm);
 }
 .provider-actions {
-  margin-top: 12px;
+  margin-top: var(--space-md);
   display: flex;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 </style>
