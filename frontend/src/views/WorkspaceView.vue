@@ -22,7 +22,6 @@ const os = useOutlineStore()
 const pid = computed(() => Number(route.params.id))
 
 const project = computed(() => projectsStore.projects.find((p) => p.id === pid.value))
-const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
 
 // ---- 侧栏页签 / 开书 ----
 const asideTab = ref('chapters')
@@ -119,11 +118,6 @@ function onBack() {
   router.push('/dashboard')
 }
 
-async function onLogout() {
-  auth.logout()
-  router.push('/login')
-}
-
 watch(
   pid,
   async (id) => {
@@ -146,263 +140,239 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-aside width="240px" class="aside">
-      <div class="aside-brand">
+  <div class="page-container ws">
+    <!-- 页面顶部操作区（原 el-header；用户下拉已由 AppLayout 顶栏提供） -->
+    <div class="ws-header">
+      <div class="header-left">
         <el-button link class="back-btn" @click="onBack">‹ 工作台</el-button>
-        <div class="book-title">{{ project?.title ?? '未知项目' }}</div>
-        <div class="book-meta">{{ project?.genre || '未设题材' }} · {{ project?.slug }}</div>
+        <span class="header-title">{{ project?.title ?? '工作台' }}</span>
+        <el-tag v-if="ws.running" type="warning" size="small" effect="dark" class="running-tag">
+          写作中{{ ws.task?.progress ? ` · ${ws.task.progress}` : '' }}
+        </el-tag>
       </div>
-      <el-tabs v-model="asideTab" class="aside-tabs">
-        <el-tab-pane label="章节" name="chapters">
-          <div class="pane-scroll">
-            <div v-for="c in ws.chapters" :key="c.chapter_no" class="chapter-item" @click="onSelectChapter(c.chapter_no)">
-              <el-tag :type="c.status === 'committed' ? 'success' : 'info'" size="small">
-                {{ c.chapter_no }}
-              </el-tag>
-              <span class="chapter-title">{{ c.title }}</span>
-              <span class="chapter-wc">{{ c.wordcount }}</span>
-            </div>
-            <div v-if="ws.chapters.length === 0" class="tree-empty">还没有章节，点「写下一章」开始</div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="大纲" name="outline">
-          <div class="pane-scroll">
-            <!-- 开书进行中：实时进度 -->
-            <AgentActivityPanel v-if="os.running" :events="os.events" />
-            <!-- 已开书：卷 → 章 → 细纲 树 -->
-            <template v-else-if="os.hasOutline && os.outline">
-              <el-collapse v-for="vol in os.outline.volumes" :key="vol.no" class="vol-collapse">
-                <el-collapse-item :title="`第${vol.no}卷 · ${vol.title}`" :name="vol.no">
-                  <div v-for="ch in vol.chapters" :key="ch.chapter_no" class="outline-chapter">
-                    <div class="oc-head">第{{ ch.chapter_no }}章 · {{ ch.title }}</div>
-                    <div v-if="ch.beats.summary" class="oc-summary">{{ ch.beats.summary }}</div>
-                    <div v-if="ch.beats.target_wordcount" class="oc-wc">目标 {{ ch.beats.target_wordcount }} 字</div>
-                    <ul v-if="ch.beats.points?.length" class="oc-points">
-                      <li v-for="(p, i) in ch.beats.points" :key="i">{{ formatPoint(p) }}</li>
-                    </ul>
-                  </div>
-                </el-collapse-item>
-              </el-collapse>
-            </template>
-            <!-- 未开书：引导开书 -->
-            <div v-else class="open-book-cta">
-              <div class="cta-title">📖 开书</div>
-              <div class="cta-desc">
-                生成第一卷大纲（卷 → 章 → 细纲）。配置 LLM key 后走真实模型；否则为 demo 确定性大纲。
-              </div>
-              <el-input
-                v-model="obScenario"
-                type="textarea"
-                :rows="3"
-                resize="none"
-                placeholder="开书意图（可选），如：都市修仙 · 废柴崛起"
-              />
-              <el-button type="primary" class="cta-btn" @click="onOpenBook(false)">开始开书</el-button>
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-aside>
-
-    <el-container>
-      <el-header class="header">
-        <div class="header-left">
-          <span class="header-title">{{ project?.title ?? '工作台' }}</span>
-          <el-tag v-if="ws.running" type="warning" size="small" effect="dark" class="running-tag">
-            写作中{{ ws.task?.progress ? ` · ${ws.task.progress}` : '' }}
-          </el-tag>
-        </div>
-        <div class="header-actions">
-          <!-- 开书 / 重新开书 -->
-          <el-popconfirm
-            v-if="os.hasOutline && !os.running"
-            title="重新开书会删除现有大纲并重新生成，确定继续？"
-            confirm-button-text="重新开书"
-            cancel-button-text="取消"
-            @confirm="onOpenBook(true)"
-          >
-            <template #reference>
-              <el-button :disabled="ws.running" plain>🔄 重新开书</el-button>
-            </template>
-          </el-popconfirm>
-          <el-button v-else-if="!os.running" :disabled="ws.running" plain @click="onOpenBook(false)">
-            📖 开书
+      <div class="header-actions">
+        <!-- 开书 / 重新开书 -->
+        <el-popconfirm
+          v-if="os.hasOutline && !os.running"
+          title="重新开书会删除现有大纲并重新生成，确定继续？"
+          confirm-button-text="重新开书"
+          cancel-button-text="取消"
+          @confirm="onOpenBook(true)"
+        >
+          <template #reference>
+            <el-button :disabled="ws.running" plain>🔄 重新开书</el-button>
+          </template>
+        </el-popconfirm>
+        <el-button v-else-if="!os.running" :disabled="ws.running" plain @click="onOpenBook(false)">
+          📖 开书
+        </el-button>
+        <el-button v-else type="danger" plain @click="os.cancel()">取消开书</el-button>
+        <el-dropdown v-if="!ws.running" trigger="click">
+          <el-button type="primary">
+            ✍️ 写下一章 <el-icon class="el-icon--right"><i class="el-icon-arrow-down" /></el-icon>
           </el-button>
-          <el-button v-else type="danger" plain @click="os.cancel()">取消开书</el-button>
-          <el-dropdown v-if="!ws.running" trigger="click">
-            <el-button type="primary">
-              ✍️ 写下一章 <el-icon class="el-icon--right"><i class="el-icon-arrow-down" /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="onWriteNext('write_next')">写下一章</el-dropdown-item>
-                <el-dropdown-item @click="onWriteNext('daily')">日更循环（连写至大纲末）</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button v-else type="danger" plain @click="onCancel">取消</el-button>
-          <el-dropdown @command="onLogout">
-            <span class="user-chip">
-              <el-avatar :size="26">{{ displayName[0]?.toUpperCase() || 'U' }}</el-avatar>
-              <span class="user-name">{{ displayName }}</span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="onWriteNext('write_next')">写下一章</el-dropdown-item>
+              <el-dropdown-item @click="onWriteNext('daily')">日更循环（连写至大纲末）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button v-else type="danger" plain @click="onCancel">取消</el-button>
+      </div>
+    </div>
+
+    <!-- 章节 / 大纲 页签（原左侧栏，现为页面内容） -->
+    <el-tabs v-model="asideTab" class="aside-tabs">
+      <el-tab-pane label="章节" name="chapters">
+        <div class="pane-scroll">
+          <div v-for="c in ws.chapters" :key="c.chapter_no" class="chapter-item" @click="onSelectChapter(c.chapter_no)">
+            <el-tag :type="c.status === 'committed' ? 'success' : 'info'" size="small">
+              {{ c.chapter_no }}
+            </el-tag>
+            <span class="chapter-title">{{ c.title }}</span>
+            <span class="chapter-wc">{{ c.wordcount }}</span>
+          </div>
+          <div v-if="ws.chapters.length === 0" class="tree-empty">还没有章节，点「写下一章」开始</div>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="大纲" name="outline">
+        <div class="pane-scroll">
+          <!-- 开书进行中：实时进度 -->
+          <AgentActivityPanel v-if="os.running" :events="os.events" />
+          <!-- 已开书：卷 → 章 → 细纲 树 -->
+          <template v-else-if="os.hasOutline && os.outline">
+            <el-collapse v-for="vol in os.outline.volumes" :key="vol.no" class="vol-collapse">
+              <el-collapse-item :title="`第${vol.no}卷 · ${vol.title}`" :name="vol.no">
+                <div v-for="ch in vol.chapters" :key="ch.chapter_no" class="outline-chapter">
+                  <div class="oc-head">第{{ ch.chapter_no }}章 · {{ ch.title }}</div>
+                  <div v-if="ch.beats.summary" class="oc-summary">{{ ch.beats.summary }}</div>
+                  <div v-if="ch.beats.target_wordcount" class="oc-wc">目标 {{ ch.beats.target_wordcount }} 字</div>
+                  <ul v-if="ch.beats.points?.length" class="oc-points">
+                    <li v-for="(p, i) in ch.beats.points" :key="i">{{ formatPoint(p) }}</li>
+                  </ul>
+                </div>
+              </el-collapse-item>
+            </el-collapse>
+          </template>
+          <!-- 未开书：引导开书 -->
+          <div v-else class="open-book-cta">
+            <div class="cta-title">📖 开书</div>
+            <div class="cta-desc">
+              生成第一卷大纲（卷 → 章 → 细纲）。配置 LLM key 后走真实模型；否则为 demo 确定性大纲。
+            </div>
+            <el-input
+              v-model="obScenario"
+              type="textarea"
+              :rows="3"
+              resize="none"
+              placeholder="开书意图（可选），如：都市修仙 · 废柴崛起"
+            />
+            <el-button type="primary" class="cta-btn" @click="onOpenBook(false)">开始开书</el-button>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- 顶部横向 Pipeline：开书三阶段 + 写作四阶段 -->
+    <div class="pipeline-zone">
+      <PipelineBar
+        :stages="OPEN_BOOK_PIPELINE"
+        :status="os.stageStatus"
+        title="开书"
+        clickable
+        @retry="onRetryStage"
+      />
+      <el-segmented
+        v-model="os.mode"
+        class="ob-mode"
+        :disabled="os.running || ws.running"
+        :options="[
+          { label: '自动入库', value: 'auto' },
+          { label: '确认入库', value: 'confirm' },
+        ]"
+        aria-label="开书模式"
+      />
+    </div>
+    <div v-if="ws.events.length > 0 || ws.running" class="pipeline-zone write">
+      <PipelineBar :stages="WRITE_PIPELINE" :status="ws.stageStatus" title="写作" />
+    </div>
+
+    <!-- 开书阶段草稿实时流式预览 -->
+    <div v-if="os.running && os.currentStage" class="draft-preview">
+      <div class="draft-preview-head">
+        <span>「{{ currentStageLabel }}」草稿 · 流式预览</span>
+        <span class="draft-preview-wc">{{ currentStageText.length }} 字</span>
+      </div>
+      <pre class="draft-preview-body">{{ currentStageText }}</pre>
+    </div>
+
+    <el-row :gutter="16" class="main-row">
+      <!-- 编辑器 -->
+      <el-col :span="16">
+        <el-card shadow="never" class="editor-card">
+          <div class="editor-head">
+            <span class="editor-title">
+              第 {{ ws.current?.chapter_no ?? '—' }} 章 · {{ ws.current?.title ?? '等待写作' }}
             </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </el-header>
+            <span class="editor-wc">{{ ws.currentWordcount }} 字</span>
+          </div>
+          <el-input
+            type="textarea"
+            :model-value="ws.currentText"
+            :readonly="ws.running"
+            :autosize="{ minRows: 22, maxRows: 32 }"
+            placeholder="点击「写下一章」，AI 会在这里流式输出正文…"
+            resize="none"
+            class="editor"
+          />
+          <div class="editor-foot">
+            <span>demo 模式（无 API key）下正文为确定性占位；配置 key 后走真实模型流式。</span>
+          </div>
+        </el-card>
+      </el-col>
 
-      <!-- 顶部横向 Pipeline：开书三阶段 + 写作四阶段 -->
-      <div class="pipeline-zone">
-        <PipelineBar
-          :stages="OPEN_BOOK_PIPELINE"
-          :status="os.stageStatus"
-          title="开书"
-          clickable
-          @retry="onRetryStage"
-        />
-        <el-segmented
-          v-model="os.mode"
-          class="ob-mode"
-          :disabled="os.running || ws.running"
-          :options="[
-            { label: '自动入库', value: 'auto' },
-            { label: '确认入库', value: 'confirm' },
-          ]"
-          aria-label="开书模式"
-        />
-      </div>
-      <div v-if="ws.events.length > 0 || ws.running" class="pipeline-zone write">
-        <PipelineBar :stages="WRITE_PIPELINE" :status="ws.stageStatus" title="写作" />
-      </div>
-
-      <!-- 开书阶段草稿实时流式预览 -->
-      <div v-if="os.running && os.currentStage" class="draft-preview">
-        <div class="draft-preview-head">
-          <span>「{{ currentStageLabel }}」草稿 · 流式预览</span>
-          <span class="draft-preview-wc">{{ currentStageText.length }} 字</span>
-        </div>
-        <pre class="draft-preview-body">{{ currentStageText }}</pre>
-      </div>
-
-      <el-main class="main">
-        <el-row :gutter="16" class="main-row">
-          <!-- 编辑器 -->
-          <el-col :span="16">
-            <el-card shadow="never" class="editor-card">
-              <div class="editor-head">
-                <span class="editor-title">
-                  第 {{ ws.current?.chapter_no ?? '—' }} 章 · {{ ws.current?.title ?? '等待写作' }}
-                </span>
-                <span class="editor-wc">{{ ws.currentWordcount }} 字</span>
+      <!-- 侧栏 -->
+      <el-col :span="8">
+        <el-tabs class="side-tabs">
+          <el-tab-pane label="追踪" name="tracking">
+            <el-card shadow="never" class="side-card">
+              <div class="kv" v-if="ws.tracking">
+                <div class="kv-row"><span>已提交章节</span><b>{{ ws.tracking.last_committed_chapter }}</b></div>
+                <div class="kv-row"><span>状态修订</span><b>rev {{ ws.tracking.state_revision }}</b></div>
+                <div class="kv-row">
+                  <span>视图一致</span>
+                  <el-tag :type="ws.tracking.views_consistent ? 'success' : 'danger'" size="small">
+                    {{ ws.tracking.views_consistent ? '一致' : '需重建' }}
+                  </el-tag>
+                </div>
               </div>
-              <el-input
-                type="textarea"
-                :model-value="ws.currentText"
-                :readonly="ws.running"
-                :autosize="{ minRows: 22, maxRows: 32 }"
-                placeholder="点击「写下一章」，AI 会在这里流式输出正文…"
-                resize="none"
-                class="editor"
-              />
-              <div class="editor-foot">
-                <span>demo 模式（无 API key）下正文为确定性占位；配置 key 后走真实模型流式。</span>
-              </div>
+              <div class="ctx-label">上下文视图（7 列 ≤12KB）</div>
+              <pre class="ctx-view">{{ ws.contextView?.content || '暂无上下文' }}</pre>
             </el-card>
-          </el-col>
+          </el-tab-pane>
+          <el-tab-pane label="Agent 活动" name="agents">
+            <AgentActivityPanel :events="ws.events" />
+          </el-tab-pane>
+        </el-tabs>
+      </el-col>
+    </el-row>
+  </div>
 
-          <!-- 侧栏 -->
-          <el-col :span="8">
-            <el-tabs class="side-tabs">
-              <el-tab-pane label="追踪" name="tracking">
-                <el-card shadow="never" class="side-card">
-                  <div class="kv" v-if="ws.tracking">
-                    <div class="kv-row"><span>已提交章节</span><b>{{ ws.tracking.last_committed_chapter }}</b></div>
-                    <div class="kv-row"><span>状态修订</span><b>rev {{ ws.tracking.state_revision }}</b></div>
-                    <div class="kv-row">
-                      <span>视图一致</span>
-                      <el-tag :type="ws.tracking.views_consistent ? 'success' : 'danger'" size="small">
-                        {{ ws.tracking.views_consistent ? '一致' : '需重建' }}
-                      </el-tag>
-                    </div>
-                  </div>
-                  <div class="ctx-label">上下文视图（7 列 ≤12KB）</div>
-                  <pre class="ctx-view">{{ ws.contextView?.content || '暂无上下文' }}</pre>
-                </el-card>
-              </el-tab-pane>
-              <el-tab-pane label="Agent 活动" name="agents">
-                <AgentActivityPanel :events="ws.events" />
-              </el-tab-pane>
-            </el-tabs>
-          </el-col>
-        </el-row>
-      </el-main>
-    </el-container>
-
-    <!-- confirm 模式：阶段草稿待确认弹窗 -->
-    <DraftConfirmDialog
-      :visible="os.waiting"
-      :stage="os.waitingDraft?.stage ?? ''"
-      :content="os.waitingDraft?.content ?? ''"
-      @confirm="onConfirmDraft"
-      @regenerate="onRegenerateDraft"
-      @cancel="os.cancel()"
-    />
-  </el-container>
+  <!-- confirm 模式：阶段草稿待确认弹窗 -->
+  <DraftConfirmDialog
+    :visible="os.waiting"
+    :stage="os.waitingDraft?.stage ?? ''"
+    :content="os.waitingDraft?.content ?? ''"
+    @confirm="onConfirmDraft"
+    @regenerate="onRegenerateDraft"
+    @cancel="os.cancel()"
+  />
 </template>
 
 <style scoped>
-.layout {
-  height: 100vh;
-}
-.aside {
-  background: #1e2530;
+.ws-header {
   display: flex;
-  flex-direction: column;
-  color: #cbd5e1;
-}
-.aside-brand {
-  padding: 14px 16px;
-  border-bottom: 1px solid #2b3442;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 .back-btn {
   color: #64748b;
   padding: 0;
-  margin-bottom: 6px;
 }
-.book-title {
-  color: #fff;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header-title {
   font-size: 16px;
   font-weight: 600;
+  color: #1f2937;
 }
-.book-meta {
-  font-size: 12px;
-  color: #64748b;
+.running-tag {
+  max-width: 380px;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .aside-tabs {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 6px 10px 0;
-}
-.aside-tabs :deep(.el-tabs__header) {
-  margin-bottom: 6px;
-}
-.aside-tabs :deep(.el-tabs__content) {
-  flex: 1;
-  min-height: 0;
-}
-.aside-tabs :deep(.el-tab-pane) {
-  height: 100%;
+  margin-bottom: var(--space-lg);
 }
 .pane-scroll {
-  height: 100%;
+  max-height: 360px;
   overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+  padding: var(--space-sm);
 }
 .vol-collapse {
   border: none;
@@ -410,35 +380,35 @@ onUnmounted(() => {
 .vol-collapse :deep(.el-collapse-item__header) {
   font-size: 13px;
   background: transparent;
-  color: #cbd5e1;
-  border-bottom: 1px solid #2b3442;
+  color: #1f2937;
+  border-bottom: 1px solid #eef2f7;
 }
 .vol-collapse :deep(.el-collapse-item__wrap) {
   background: transparent;
   border-bottom: none;
 }
 .vol-collapse :deep(.el-collapse-item__content) {
-  color: #cbd5e1;
+  color: #4e5969;
   padding-bottom: 8px;
 }
 .outline-chapter {
   padding: 6px 4px;
-  border-bottom: 1px dashed #2b3442;
+  border-bottom: 1px dashed #eef2f7;
 }
 .oc-head {
   font-size: 12px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #1f2937;
 }
 .oc-summary {
   font-size: 12px;
-  color: #94a3b8;
+  color: #6b7280;
   margin-top: 3px;
   line-height: 1.5;
 }
 .oc-wc {
   font-size: 11px;
-  color: #64748b;
+  color: #9ca3af;
   margin-top: 2px;
 }
 .oc-points {
@@ -447,7 +417,7 @@ onUnmounted(() => {
 }
 .oc-points li {
   font-size: 11px;
-  color: #94a3b8;
+  color: #6b7280;
   margin-bottom: 2px;
 }
 .open-book-cta {
@@ -456,12 +426,12 @@ onUnmounted(() => {
 .cta-title {
   font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #1f2937;
   margin-bottom: 8px;
 }
 .cta-desc {
   font-size: 12px;
-  color: #94a3b8;
+  color: #6b7280;
   line-height: 1.6;
   margin-bottom: 10px;
 }
@@ -478,7 +448,7 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .chapter-item:hover {
-  background: #2b3442;
+  background: var(--color-bg-page);
 }
 .chapter-title {
   flex: 1;
@@ -489,11 +459,11 @@ onUnmounted(() => {
 }
 .chapter-wc {
   font-size: 11px;
-  color: #64748b;
+  color: #9ca3af;
 }
 .tree-empty {
   font-size: 12px;
-  color: #64748b;
+  color: #9ca3af;
   text-align: center;
   padding: 24px 0;
 }
@@ -502,20 +472,23 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   background: #fff;
-  border-bottom: 1px solid #eef2f7;
-  padding: 8px 20px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: 8px 16px;
+  margin-bottom: var(--space-lg);
 }
 .pipeline-zone.write {
   padding-top: 0;
-  border-top: 1px dashed #eef2f7;
 }
 .ob-mode {
   flex-shrink: 0;
 }
 .draft-preview {
   background: #fff;
-  border-bottom: 1px solid #eef2f7;
-  padding: 6px 20px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: 6px 16px 12px;
+  margin-bottom: var(--space-lg);
 }
 .draft-preview-head {
   display: flex;
@@ -544,44 +517,6 @@ onUnmounted(() => {
   color: #334155;
   font-family: 'Songti SC', 'SimSun', Georgia, serif;
   margin: 0;
-}
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.header-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.running-tag {
-  max-width: 380px;
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-.user-name {
-  font-size: 14px;
-  color: #374151;
-}
-.main {
-  background: #f5f6fa;
 }
 .main-row {
   height: 100%;

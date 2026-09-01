@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AgentActivityPanel from '@/components/AgentActivityPanel.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -10,9 +9,6 @@ import { useQualityStore } from '@/stores/quality'
 const auth = useAuthStore()
 const projectsStore = useProjectsStore()
 const quality = useQualityStore()
-const router = useRouter()
-
-const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
 
 const pid = ref<number | null>(null)
 const chapterNo = ref<number | null>(null)
@@ -67,11 +63,6 @@ async function onAcceptDeslop() {
   }
 }
 
-function onLogout() {
-  auth.logout()
-  router.push('/login')
-}
-
 onMounted(async () => {
   if (!auth.user) await auth.fetchMe()
   await projectsStore.fetchList()
@@ -79,257 +70,156 @@ onMounted(async () => {
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-aside width="220px" class="aside">
-      <div class="aside-brand">
-        <span class="aside-logo">文</span>
-        <span class="aside-title">Novel Agents</span>
-      </div>
-      <el-menu :default-active="$route.path" router class="aside-menu">
-        <el-menu-item index="/dashboard">工作台</el-menu-item>
-        <el-menu-item index="/analysis">拆文库</el-menu-item>
-        <el-menu-item index="/quality">审查 / 去味</el-menu-item>
-        <el-menu-item index="/scan">扫榜</el-menu-item>
-        <el-menu-item index="/usage">用量</el-menu-item>
-        <el-menu-item index="/settings">设置</el-menu-item>
-      </el-menu>
-    </el-aside>
+  <div class="page-container">
+    <el-row :gutter="16">
+      <!-- 选择区 -->
+      <el-col :span="7">
+        <el-card shadow="never" class="sel-card">
+          <template #header>① 选择项目与章节</template>
+          <el-select
+            v-model="pid"
+            placeholder="选择项目"
+            class="mb w-full"
+            filterable
+            @change="onProjectChange"
+          >
+            <el-option v-for="p in projectsStore.projects" :key="p.id" :label="p.title" :value="p.id">
+              <span>{{ p.title }}</span>
+              <span class="option-slug">{{ p.slug }}</span>
+            </el-option>
+          </el-select>
+          <el-select
+            v-model="chapterNo"
+            placeholder="选择章节"
+            class="w-full"
+            :disabled="!pid"
+            @change="onChapterChange"
+          >
+            <el-option
+              v-for="c in quality.chapters"
+              :key="c.chapter_no"
+              :label="`第 ${c.chapter_no} 章 · ${c.wordcount} 字 · ${c.status}`"
+              :value="c.chapter_no"
+            />
+          </el-select>
+          <div v-if="quality.running" class="running-line">
+            <el-tag type="warning" effect="dark" size="small">
+              运行中{{ quality.task?.progress ? ` · ${quality.task.progress}` : '' }}
+            </el-tag>
+            <el-button size="small" text @click="quality.cancel()">取消</el-button>
+          </div>
+        </el-card>
 
-    <el-container>
-      <el-header class="header">
-        <div class="header-title">审查 · 去味 · 已提交章节质量体检</div>
-        <el-dropdown @command="onLogout">
-          <span class="user-chip">
-            <el-avatar :size="28">{{ displayName[0]?.toUpperCase() || 'U' }}</el-avatar>
-            <span class="user-name">{{ displayName }}</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </el-header>
+        <el-card shadow="never" class="sel-card">
+          <template #header>当前章节</template>
+          <div v-if="!currentChapter" class="empty">先选择章节</div>
+          <div v-else>
+            <div class="ch-meta">第 {{ currentChapter.chapter_no }} 章</div>
+            <div class="ch-sub">{{ currentChapter.wordcount }} 字 · {{ currentChapter.status }} · rev {{ currentChapter.revision }}</div>
+          </div>
+        </el-card>
+      </el-col>
 
-      <el-main class="main">
-        <el-row :gutter="16">
-          <!-- 选择区 -->
-          <el-col :span="7">
-            <el-card shadow="never" class="sel-card">
-              <template #header>① 选择项目与章节</template>
-              <el-select
-                v-model="pid"
-                placeholder="选择项目"
-                class="mb w-full"
-                filterable
-                @change="onProjectChange"
-              >
-                <el-option v-for="p in projectsStore.projects" :key="p.id" :label="p.title" :value="p.id">
-                  <span>{{ p.title }}</span>
-                  <span class="option-slug">{{ p.slug }}</span>
-                </el-option>
-              </el-select>
-              <el-select
-                v-model="chapterNo"
-                placeholder="选择章节"
-                class="w-full"
-                :disabled="!pid"
-                @change="onChapterChange"
-              >
-                <el-option
-                  v-for="c in quality.chapters"
-                  :key="c.chapter_no"
-                  :label="`第 ${c.chapter_no} 章 · ${c.wordcount} 字 · ${c.status}`"
-                  :value="c.chapter_no"
-                />
-              </el-select>
-              <div v-if="quality.running" class="running-line">
-                <el-tag type="warning" effect="dark" size="small">
-                  运行中{{ quality.task?.progress ? ` · ${quality.task.progress}` : '' }}
+      <!-- 结果区 -->
+      <el-col :span="17">
+        <el-tabs v-if="currentChapter" class="result-tabs">
+          <!-- 审查 -->
+          <el-tab-pane label="🔍 审查" name="review">
+            <div class="toolbar">
+              <el-radio-group v-model="mode">
+                <el-radio-button value="full">全量（4 评审）</el-radio-button>
+                <el-radio-button value="lean">精简</el-radio-button>
+                <el-radio-button value="solo">单评审</el-radio-button>
+              </el-radio-group>
+              <el-button type="primary" :loading="quality.running" @click="onRunReview">跑审查</el-button>
+            </div>
+
+            <el-empty v-if="quality.reviews.length === 0" description="尚未审查该章节" />
+            <div v-else class="review-wrap">
+              <div class="verdict-row">
+                <el-tag :type="(latestReview?.score ?? 0) >= 80 ? 'success' : (latestReview?.score ?? 0) >= 60 ? 'warning' : 'danger'" effect="dark" size="large">
+                  {{ latestReview?.score }} 分 · {{ latestReview?.verdict }}
                 </el-tag>
-                <el-button size="small" text @click="quality.cancel()">取消</el-button>
+                <span class="rev-meta">{{ latestReview?.mode }} · {{ latestReview?.created_at }}</span>
               </div>
-            </el-card>
+              <pre v-if="latestReview?.summary" class="summary">{{ latestReview.summary }}</pre>
 
-            <el-card shadow="never" class="sel-card">
-              <template #header>当前章节</template>
-              <div v-if="!currentChapter" class="empty">先选择章节</div>
-              <div v-else>
-                <div class="ch-meta">第 {{ currentChapter.chapter_no }} 章</div>
-                <div class="ch-sub">{{ currentChapter.wordcount }} 字 · {{ currentChapter.status }} · rev {{ currentChapter.revision }}</div>
+              <div v-if="latestReview?.findings?.length">
+                <div class="section-label">findings（{{ latestReview.findings.length }} 条）</div>
+                <div v-for="(f, i) in latestReview.findings" :key="i" class="finding">
+                  <div class="finding-head">
+                    <el-tag size="small" :type="severityTag[f.severity] ?? 'info'">{{ f.severity }}</el-tag>
+                    <el-tag size="small" type="primary" effect="plain">{{ f.reviewer }}</el-tag>
+                    <span class="finding-type">{{ f.type }}</span>
+                  </div>
+                  <div class="finding-quote">「{{ f.quote }}」</div>
+                  <div class="finding-reason">{{ f.reason }}</div>
+                  <div v-if="f.suggestion" class="finding-suggest">建议：{{ f.suggestion }}</div>
+                </div>
               </div>
-            </el-card>
-          </el-col>
+              <el-empty v-else description="未发现问题，写得不错" :image-size="60" />
+            </div>
+          </el-tab-pane>
 
-          <!-- 结果区 -->
-          <el-col :span="17">
-            <el-tabs v-if="currentChapter" class="result-tabs">
-              <!-- 审查 -->
-              <el-tab-pane label="🔍 审查" name="review">
-                <div class="toolbar">
-                  <el-radio-group v-model="mode">
-                    <el-radio-button value="full">全量（4 评审）</el-radio-button>
-                    <el-radio-button value="lean">精简</el-radio-button>
-                    <el-radio-button value="solo">单评审</el-radio-button>
-                  </el-radio-group>
-                  <el-button type="primary" :loading="quality.running" @click="onRunReview">跑审查</el-button>
-                </div>
+          <!-- 去味 -->
+          <el-tab-pane label="🧹 去味" name="deslop">
+            <div class="toolbar">
+              <el-button type="primary" plain :loading="quality.running" @click="onRunDeslop">一键去味</el-button>
+              <el-button
+                v-if="quality.deslop?.ready"
+                type="success"
+                :disabled="quality.running"
+                @click="onAcceptDeslop"
+              >
+                接受并提交
+              </el-button>
+            </div>
 
-                <el-empty v-if="quality.reviews.length === 0" description="尚未审查该章节" />
-                <div v-else class="review-wrap">
-                  <div class="verdict-row">
-                    <el-tag :type="(latestReview?.score ?? 0) >= 80 ? 'success' : (latestReview?.score ?? 0) >= 60 ? 'warning' : 'danger'" effect="dark" size="large">
-                      {{ latestReview?.score }} 分 · {{ latestReview?.verdict }}
-                    </el-tag>
-                    <span class="rev-meta">{{ latestReview?.mode }} · {{ latestReview?.created_at }}</span>
-                  </div>
-                  <pre v-if="latestReview?.summary" class="summary">{{ latestReview.summary }}</pre>
+            <el-empty v-if="!quality.deslop" description="先去味该章节" />
+            <el-empty
+              v-else-if="!quality.deslop.ready"
+              :description="quality.deslop.reason || '尚无去味结果'"
+            />
+            <div v-else>
+              <div class="grade-row">
+                <el-tag type="primary" effect="dark" size="large">Gate {{ quality.deslop.grade }}</el-tag>
+                <span class="rev-meta">{{ quality.deslop.score }} 分 · 共 {{ quality.deslop.findings?.length ?? 0 }} 处问题</span>
+              </div>
+              <div class="wc-row">
+                <span>原文 {{ quality.deslop.original_wordcount }} 字</span>
+                <span>→</span>
+                <span>改写 {{ quality.deslop.new_wordcount }} 字</span>
+                <el-tag size="small" :type="(quality.deslop.delta_wordcount ?? 0) < 0 ? 'success' : 'info'">
+                  变化 {{ (quality.deslop.delta_wordcount ?? 0) > 0 ? '+' : '' }}{{ quality.deslop.delta_wordcount ?? 0 }}
+                </el-tag>
+              </div>
 
-                  <div v-if="latestReview?.findings?.length">
-                    <div class="section-label">findings（{{ latestReview.findings.length }} 条）</div>
-                    <div v-for="(f, i) in latestReview.findings" :key="i" class="finding">
-                      <div class="finding-head">
-                        <el-tag size="small" :type="severityTag[f.severity] ?? 'info'">{{ f.severity }}</el-tag>
-                        <el-tag size="small" type="primary" effect="plain">{{ f.reviewer }}</el-tag>
-                        <span class="finding-type">{{ f.type }}</span>
-                      </div>
-                      <div class="finding-quote">「{{ f.quote }}」</div>
-                      <div class="finding-reason">{{ f.reason }}</div>
-                      <div v-if="f.suggestion" class="finding-suggest">建议：{{ f.suggestion }}</div>
-                    </div>
-                  </div>
-                  <el-empty v-else description="未发现问题，写得不错" :image-size="60" />
-                </div>
-              </el-tab-pane>
+              <el-row :gutter="12" class="diff-row">
+                <el-col :span="12">
+                  <div class="diff-head">原文</div>
+                  <pre class="diff-body original">{{ quality.deslop.original }}</pre>
+                </el-col>
+                <el-col :span="12">
+                  <div class="diff-head">去味后</div>
+                  <pre class="diff-body rewritten">{{ quality.deslop.rewritten }}</pre>
+                </el-col>
+              </el-row>
+            </div>
+          </el-tab-pane>
 
-              <!-- 去味 -->
-              <el-tab-pane label="🧹 去味" name="deslop">
-                <div class="toolbar">
-                  <el-button type="primary" plain :loading="quality.running" @click="onRunDeslop">一键去味</el-button>
-                  <el-button
-                    v-if="quality.deslop?.ready"
-                    type="success"
-                    :disabled="quality.running"
-                    @click="onAcceptDeslop"
-                  >
-                    接受并提交
-                  </el-button>
-                </div>
+          <!-- Agent 活动 -->
+          <el-tab-pane label="🤖 Agent 活动" name="agents">
+            <AgentActivityPanel :events="quality.events" />
+          </el-tab-pane>
+        </el-tabs>
 
-                <el-empty v-if="!quality.deslop" description="先去味该章节" />
-                <el-empty
-                  v-else-if="!quality.deslop.ready"
-                  :description="quality.deslop.reason || '尚无去味结果'"
-                />
-                <div v-else>
-                  <div class="grade-row">
-                    <el-tag type="primary" effect="dark" size="large">Gate {{ quality.deslop.grade }}</el-tag>
-                    <span class="rev-meta">{{ quality.deslop.score }} 分 · 共 {{ quality.deslop.findings?.length ?? 0 }} 处问题</span>
-                  </div>
-                  <div class="wc-row">
-                    <span>原文 {{ quality.deslop.original_wordcount }} 字</span>
-                    <span>→</span>
-                    <span>改写 {{ quality.deslop.new_wordcount }} 字</span>
-                    <el-tag size="small" :type="(quality.deslop.delta_wordcount ?? 0) < 0 ? 'success' : 'info'">
-                      变化 {{ (quality.deslop.delta_wordcount ?? 0) > 0 ? '+' : '' }}{{ quality.deslop.delta_wordcount ?? 0 }}
-                    </el-tag>
-                  </div>
-
-                  <el-row :gutter="12" class="diff-row">
-                    <el-col :span="12">
-                      <div class="diff-head">原文</div>
-                      <pre class="diff-body original">{{ quality.deslop.original }}</pre>
-                    </el-col>
-                    <el-col :span="12">
-                      <div class="diff-head">去味后</div>
-                      <pre class="diff-body rewritten">{{ quality.deslop.rewritten }}</pre>
-                    </el-col>
-                  </el-row>
-                </div>
-              </el-tab-pane>
-
-              <!-- Agent 活动 -->
-              <el-tab-pane label="🤖 Agent 活动" name="agents">
-                <AgentActivityPanel :events="quality.events" />
-              </el-tab-pane>
-            </el-tabs>
-
-            <el-empty v-else class="empty-big" description="选择项目与章节后在此审查 / 去味" />
-          </el-col>
-        </el-row>
-      </el-main>
-    </el-container>
-  </el-container>
+        <el-empty v-else class="empty-big" description="选择项目与章节后在此审查 / 去味" />
+      </el-col>
+    </el-row>
+  </div>
 </template>
 
 <style scoped>
-.layout {
-  height: 100vh;
-}
-.aside {
-  background: #1e2530;
-  display: flex;
-  flex-direction: column;
-}
-.aside-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 20px;
-  color: #fff;
-}
-.aside-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand);
-  color: #fff;
-  font-family: Georgia, serif;
-  font-weight: bold;
-}
-.aside-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-.aside-menu {
-  border-right: none;
-  background: transparent;
-  --el-menu-text-color: #cbd5e1;
-  --el-menu-hover-bg-color: #2b3442;
-  --el-menu-active-color: #fff;
-  --el-menu-bg-color: transparent;
-}
-.aside-menu .el-menu-item {
-  background: transparent;
-}
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-}
-.header-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-.user-name {
-  font-size: 14px;
-  color: #374151;
-}
-.main {
-  background: #f5f6fa;
-}
 .sel-card {
   margin-bottom: 16px;
 }
