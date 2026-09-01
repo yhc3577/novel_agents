@@ -28,14 +28,21 @@ const router = createRouter({
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true, title: '工作台' },
         },
-        // NOTE 本任务四个新页面文件尚未创建，路由项「注释」保持 typecheck 通过；
-        // 对应 Task 6/7/8/9 落地时依次取消注释并把 projects/:id 切到 NovelDetailView。
-        // {
-        //   path: 'projects/:id',
-        //   name: 'novel-detail',
-        //   component: () => import('@/views/NovelDetailView.vue'),
-        //   meta: { requiresAuth: true, title: '项目详情' },
-        // },
+        // NOTE Task 7/8/9 的新页面文件尚未创建，路由项保持「注释」通过 typecheck；
+        // 落地时依次取消注释（review/console/chapters 已挂到 NovelDetailView 的按钮）。
+        {
+          path: 'projects/:id',
+          name: 'novel-detail',
+          component: () => import('@/views/NovelDetailView.vue'),
+          meta: { requiresAuth: true, title: '项目详情' },
+        },
+        {
+          // 旧工作台兜底路由：Task 10 移除本路由（/projects/:id 详情页为唯一入口）
+          path: 'projects/:id/workspace',
+          name: 'workspace-legacy',
+          component: () => import('@/views/WorkspaceView.vue'),
+          meta: { requiresAuth: true, title: '写作工作台' },
+        },
         // {
         //   path: 'projects/:id/review',
         //   name: 'outline-review',
@@ -54,13 +61,6 @@ const router = createRouter({
         //   component: () => import('@/views/ChapterView.vue'),
         //   meta: { requiresAuth: true, title: '章节阅读' },
         // },
-        {
-          // 本任务 projects/:id 仍指向旧工作台；Task 6 起切到 NovelDetailView 并把旧页移入本兜底路由
-          path: 'projects/:id',
-          name: 'workspace',
-          component: () => import('@/views/WorkspaceView.vue'),
-          meta: { requiresAuth: true, title: '写作工作台' },
-        },
         {
           path: 'analysis',
           name: 'analysis',
