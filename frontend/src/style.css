@@ -18,13 +18,4 @@ body,
 body {
   font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #f5f6fa;
-  color: #1f2937;
-}
-
-.page-centered {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
