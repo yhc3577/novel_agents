@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { useOutlineStore } from '@/stores/outline'
 import { useProjectsStore } from '@/stores/projects'
 import { useWritingStore } from '@/stores/writing'
+import { writingApi } from '@/api/writing'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,8 +37,13 @@ onMounted(async () => {
 })
 
 async function loadChapter(chapterNo: number) {
-  const detail = await (await import('@/api/writing')).writingApi.getChapter(pid.value, chapterNo)
-  ws.current = detail
+  try {
+    const detail = await writingApi.getChapter(pid.value, chapterNo)
+    ws.current = detail
+  } catch {
+    ElMessage.error('加载章节失败')
+    ws.current = null
+  }
 }
 
 function formatPoint(p: unknown): string {

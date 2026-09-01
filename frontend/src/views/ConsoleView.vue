@@ -7,6 +7,7 @@ import PipelineBar from '@/components/PipelineBar.vue'
 import { useProjectsStore } from '@/stores/projects'
 import { useWritingStore } from '@/stores/writing'
 import { WRITE_PIPELINE } from '@/types/writing'
+import { writingApi } from '@/api/writing'
 
 const route = useRoute()
 const projectsStore = useProjectsStore()
@@ -39,7 +40,7 @@ function onSelectChapter(chapterNo: number) {
 }
 
 async function loadChapter(chapterNo: number) {
-  const detail = await (await import('@/api/writing')).writingApi.getChapter(pid.value, chapterNo)
+  const detail = await writingApi.getChapter(pid.value, chapterNo)
   ws.current = detail
 }
 
