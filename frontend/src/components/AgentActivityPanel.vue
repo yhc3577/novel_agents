@@ -12,6 +12,8 @@ const timestamps = ref<string[]>([])
 watch(
   () => props.events.length,
   (n) => {
+    // 事件列表被替换/收缩（新一轮开始）时重置时间戳
+    if (n < timestamps.value.length) timestamps.value = []
     while (timestamps.value.length < n) {
       timestamps.value.push(
         new Date().toLocaleTimeString('zh-CN', { hour12: false }),
@@ -76,7 +78,7 @@ const stageLabel: Record<string, string> = {
         <!-- 流式正文 -->
         <span v-else class="token-line">
           <span v-if="ev.content" class="event-token">{{ ev.content }}</span>
-          <span class="cursor-blink">|</span>
+          <span v-if="ev.content" class="cursor-blink">|</span>
         </span>
       </div>
     </div>

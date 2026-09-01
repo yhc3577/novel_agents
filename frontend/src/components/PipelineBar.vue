@@ -94,23 +94,23 @@ function onClick(stage: string, st: StageStatus | undefined) {
     box-shadow var(--transition-fast),
     background var(--transition-fast);
 }
-.step.running {
+.stage.running .step {
   background: var(--color-primary-lighter);
   border-color: var(--color-primary);
   color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(22, 93, 255, 0.1);
 }
-.step.done {
+.stage.done .step {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
 }
-.step.waiting {
+.stage.waiting .step {
   background: var(--color-warning-light);
   border-color: var(--color-warning);
   color: var(--color-warning);
 }
-.step.error {
+.stage.error .step {
   background: var(--color-danger-light);
   border-color: var(--color-danger);
   color: var(--color-danger);
