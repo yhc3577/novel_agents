@@ -28,7 +28,7 @@ const router = createRouter({
           component: () => import('@/views/DashboardView.vue'),
           meta: { requiresAuth: true, title: '工作台' },
         },
-        // NOTE Task 7/8 已落地（console 已打开）；Task 9 的 ChapterView 尚未创建，路由项保持「注释」。
+        // NOTE Task 7/8/9 已落地（console/大纲审核/章节阅读均已打开）。
         {
           path: 'projects/:id',
           name: 'novel-detail',
@@ -54,12 +54,12 @@ const router = createRouter({
           component: () => import('@/views/ConsoleView.vue'),
           meta: { requiresAuth: true, title: '创作控制台' },
         },
-        // {
-        //   path: 'projects/:id/chapters/:chapterNo',
-        //   name: 'chapter-view',
-        //   component: () => import('@/views/ChapterView.vue'),
-        //   meta: { requiresAuth: true, title: '章节阅读' },
-        // },
+        {
+          path: 'projects/:id/chapters/:chapterNo',
+          name: 'chapter-view',
+          component: () => import('@/views/ChapterView.vue'),
+          meta: { requiresAuth: true, title: '章节阅读' },
+        },
         {
           path: 'analysis',
           name: 'analysis',
